@@ -8,7 +8,6 @@
     html, body { height:100%; margin:0; background:#050913; overflow:hidden; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
     canvas { display:block; width:100vw; height:100vh; }
 
-    /* HUD */
     .hud {
       position: fixed;
       top: 14px;
@@ -162,30 +161,23 @@
 
 <script>
 (() => {
-  // =============================
-  // Globals / Canvas
-  // =============================
   const canvas = document.getElementById('c');
-  const ctx = canvas.getContext('2d', { alpha: false });
+  const ctx = canvas.getContext('2d', { alpha:false });
 
   let W=0, H=0, DPR=1;
-
   function resize() {
     DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-    W = Math.floor(window.innerWidth);
-    H = Math.floor(window.innerHeight);
-    canvas.width = Math.floor(W * DPR);
-    canvas.height = Math.floor(H * DPR);
+    W = Math.floor(innerWidth);
+    H = Math.floor(innerHeight);
+    canvas.width = Math.floor(W*DPR);
+    canvas.height = Math.floor(H*DPR);
     canvas.style.width = W+'px';
     canvas.style.height = H+'px';
     ctx.setTransform(DPR,0,0,DPR,0,0);
   }
-  window.addEventListener('resize', resize, { passive:true });
+  addEventListener('resize', resize, { passive:true });
   resize();
 
-  // =============================
-  // UI refs
-  // =============================
   const ui = {
     runTime: document.getElementById('runTime'),
     bestTime: document.getElementById('bestTime'),
@@ -212,813 +204,712 @@
     return `${m}:${String(r).padStart(2,'0')}`;
   }
 
-  // =============================
-  // Leaderboard (localStorage)
-  // =============================
+  // Leaderboard
   const LB_KEY = 'sinkshift_leaderboard_v1';
-  function loadLB() {
-    try {
-      const raw = localStorage.getItem(LB_KEY);
-      const arr = raw ? JSON.parse(raw) : [];
-      return Array.isArray(arr) ? arr : [];
-    } catch { return []; }
-  }
-  function saveLB(arr) {
-    localStorage.setItem(LB_KEY, JSON.stringify(arr.slice(0,5)));
-  }
-  function renderLB() {
-    const lb = loadLB().slice(0,5);
-    ui.lbList.innerHTML = '';
-    lb.forEach((e, i) => {
-      const div = document.createElement('div');
-      div.className = 'item';
-      div.innerHTML = `<span>#${i+1} <b>${(e.name||'???').toUpperCase()}</b></span><span><b>${fmtTime(e.timeMs)}</b></span>`;
+  function loadLB(){ try{ const r=localStorage.getItem(LB_KEY); const a=r?JSON.parse(r):[]; return Array.isArray(a)?a:[]; }catch{return [];} }
+  function saveLB(a){ localStorage.setItem(LB_KEY, JSON.stringify(a.slice(0,5))); }
+  function renderLB(){
+    const lb=loadLB().slice(0,5);
+    ui.lbList.innerHTML='';
+    if (!lb.length){
+      const div=document.createElement('div');
+      div.className='item';
+      div.innerHTML=`<span style="opacity:.75">No scores yet</span><span>—</span>`;
+      ui.lbList.appendChild(div);
+      return;
+    }
+    lb.forEach((e,i)=>{
+      const div=document.createElement('div');
+      div.className='item';
+      div.innerHTML=`<span>#${i+1} <b>${(e.name||'???').toUpperCase()}</b></span><span><b>${fmtTime(e.timeMs)}</b></span>`;
       ui.lbList.appendChild(div);
     });
-    if (lb.length === 0) {
-      const div = document.createElement('div');
-      div.className = 'item';
-      div.innerHTML = `<span style="opacity:.75">No scores yet</span><span>—</span>`;
-      ui.lbList.appendChild(div);
-    }
+  }
+  function maybeQualifyScore(t){
+    const lb=loadLB().slice(0,5);
+    if (lb.length<5) return true;
+    return t > (lb[lb.length-1]?.timeMs ?? 0);
+  }
+  function insertScore(name,timeMs){
+    const lb=loadLB().slice(0,5);
+    lb.push({ name:(name||'???').toUpperCase().slice(0,12), timeMs });
+    lb.sort((a,b)=>b.timeMs-a.timeMs);
+    saveLB(lb);
+    renderLB();
   }
   renderLB();
 
-  function maybeQualifyScore(timeMs) {
-    const lb = loadLB().slice(0,5);
-    if (lb.length < 5) return true;
-    const worst = lb[lb.length-1]?.timeMs ?? 0;
-    return timeMs > worst;
+  // Toast
+  let toastTO=null;
+  function toast(msg,ms=1400){
+    ui.toast.textContent=msg;
+    ui.toast.style.display='block';
+    clearTimeout(toastTO);
+    toastTO=setTimeout(()=>ui.toast.style.display='none', ms);
   }
 
-  function insertScore(name, timeMs) {
-    const lb = loadLB().slice(0,5);
-    lb.push({ name: (name||'???').toUpperCase().slice(0,12), timeMs });
-    lb.sort((a,b)=> b.timeMs - a.timeMs);
-    saveLB(lb.slice(0,5));
-    renderLB();
-  }
+  // INPUT
+  const keys=new Set();
+  addEventListener('keydown',(e)=>{
+    if (e.code==='KeyP'){ state.paused=!state.paused; e.preventDefault(); return; }
+    if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
+    keys.add(e.code);
+  },{passive:false});
+  addEventListener('keyup',(e)=>keys.delete(e.code),{passive:true});
 
   // =============================
-  // Asset: ship.png mask
+  // SHIP ASSET (ship.png) + AUTO REMOVE BLACK BACKGROUND
   // =============================
   const shipImg = new Image();
   shipImg.src = './ship.png';
 
-  let shipMaskCanvas = document.createElement('canvas');
-  let shipMaskCtx = shipMaskCanvas.getContext('2d', { willReadFrequently:true });
-  let shipMaskData = null; // ImageData
+  const shipTex = document.createElement('canvas');  // processed ship (black keyed out)
+  const shipTexCtx = shipTex.getContext('2d', { willReadFrequently:true });
+
+  const shipMask = document.createElement('canvas'); // mask alpha
+  const shipMaskCtx = shipMask.getContext('2d', { willReadFrequently:true });
+
+  let shipRGBA = null;   // Uint8ClampedArray of processed tex pixels
+  let maskA = null;      // Uint8ClampedArray alpha
   let shipReady = false;
 
-  shipImg.onload = () => {
-    shipMaskCanvas.width = shipImg.naturalWidth;
-    shipMaskCanvas.height = shipImg.naturalHeight;
-    shipMaskCtx.clearRect(0,0,shipMaskCanvas.width, shipMaskCanvas.height);
-    shipMaskCtx.drawImage(shipImg, 0,0);
-    shipMaskData = shipMaskCtx.getImageData(0,0,shipMaskCanvas.width, shipMaskCanvas.height).data;
-    shipReady = true;
-    toast(`Loaded ship.png (${shipImg.naturalWidth}×${shipImg.naturalHeight})`);
-  };
-  shipImg.onerror = () => {
-    shipReady = false;
-    toast(`Couldn't load ship.png — using fallback ship`, 2500);
-  };
+  function buildProcessedShip() {
+    shipTex.width = shipImg.naturalWidth;
+    shipTex.height = shipImg.naturalHeight;
+    shipTexCtx.clearRect(0,0,shipTex.width,shipTex.height);
+    shipTexCtx.drawImage(shipImg, 0,0);
 
-  function alphaAt(u, v) {
-    if (!shipMaskData) return 0;
-    const x = Math.max(0, Math.min(shipMaskCanvas.width-1, Math.floor(u)));
-    const y = Math.max(0, Math.min(shipMaskCanvas.height-1, Math.floor(v)));
-    const i = (y * shipMaskCanvas.width + x) * 4 + 3;
-    return shipMaskData[i]; // alpha
+    const img = shipTexCtx.getImageData(0,0,shipTex.width,shipTex.height);
+    const d = img.data;
+
+    // Key out near-black pixels (fixes your “background disappeared” issue)
+    // If a pixel is very dark, treat it as transparent.
+    for (let i=0;i<d.length;i+=4){
+      const r=d[i], g=d[i+1], b=d[i+2], a=d[i+3];
+      if (a===0) continue;
+      const maxc = Math.max(r,g,b);
+      if (maxc < 18) { // near-black background
+        d[i+3]=0;
+      }
+    }
+    shipTexCtx.putImageData(img, 0,0);
+
+    // Build alpha mask + cache arrays
+    shipMask.width = shipTex.width;
+    shipMask.height = shipTex.height;
+    shipMaskCtx.clearRect(0,0,shipMask.width,shipMask.height);
+    shipMaskCtx.drawImage(shipTex, 0,0);
+
+    const m = shipMaskCtx.getImageData(0,0,shipMask.width,shipMask.height);
+    shipRGBA = img.data;         // processed pixels
+    maskA = m.data;              // includes alpha in .data[3] too; we’ll read alpha from it
+    shipReady = true;
+
+    toast(`Loaded ship.png (processed transparency)`);
+  }
+
+  shipImg.onload = () => buildProcessedShip();
+  shipImg.onerror = () => { shipReady=false; toast(`Couldn't load ship.png`); };
+
+  function alphaAt(nx, ny){
+    if (!shipReady) return 255;
+    const x = Math.max(0, Math.min(shipTex.width-1, Math.floor(nx*shipTex.width)));
+    const y = Math.max(0, Math.min(shipTex.height-1, Math.floor(ny*shipTex.height)));
+    const idx = (y*shipTex.width + x)*4 + 3;
+    return maskA[idx];
+  }
+
+  function rgbAt(nx, ny){
+    if (!shipReady) return {r:0,g:0,b:0};
+    const x = Math.max(0, Math.min(shipTex.width-1, Math.floor(nx*shipTex.width)));
+    const y = Math.max(0, Math.min(shipTex.height-1, Math.floor(ny*shipTex.height)));
+    const idx = (y*shipTex.width + x)*4;
+    return { r: shipRGBA[idx], g: shipRGBA[idx+1], b: shipRGBA[idx+2] };
+  }
+
+  function luminance(r,g,b){
+    return 0.2126*r + 0.7152*g + 0.0722*b;
   }
 
   // =============================
-  // Layout (fullscreen, ship big)
+  // LAYOUT
   // =============================
-  const HUD_W = 380;      // reserve for HUD visually
+  const HUD_W = 380;
   const SAFE_PAD = 20;
-
-  // Ship rect in screen coords (computed each frame)
   const shipRect = { x:0, y:0, w:0, h:0 };
 
-  // We draw ship centered-left and BIG.
-  function rebuildShipRect() {
-    const availW = Math.max(420, W - HUD_W - SAFE_PAD*2);
+  function rebuildShipRect(){
+    const availW = Math.max(520, W - HUD_W - SAFE_PAD*2);
     const availH = H - SAFE_PAD*2;
 
-    // target area (slightly larger than avail to feel big)
-    const targetW = availW * 1.05;
-    const targetH = availH * 0.72; // leave some sky above
+    const iw = shipReady ? shipTex.width : 1400;
+    const ih = shipReady ? shipTex.height : 600;
 
-    // If image loaded, fit by aspect. If not, use fallback dims.
-    const iw = shipReady ? shipImg.naturalWidth : 1400;
-    const ih = shipReady ? shipImg.naturalHeight : 600;
+    // Bigger ship (you asked for bigger)
+    const targetW = availW * 1.12;
+    const targetH = availH * 0.78;
 
-    const s = Math.min(targetW / iw, targetH / ih) * 1.10; // boost
+    const s = Math.min(targetW/iw, targetH/ih) * 1.18;
 
-    shipRect.w = iw * s;
-    shipRect.h = ih * s;
+    shipRect.w = iw*s;
+    shipRect.h = ih*s;
 
-    // push ship forward (bigger + closer to camera)
-    shipRect.x = SAFE_PAD + (availW - shipRect.w) * 0.10;
-    shipRect.y = SAFE_PAD + (availH - shipRect.h) * 0.38; // sit lower
+    shipRect.x = SAFE_PAD + (availW - shipRect.w)*0.04;
+    shipRect.y = SAFE_PAD + (availH - shipRect.h)*0.34;
 
-    // clamp so it doesn't go off top
-    shipRect.y = Math.max(SAFE_PAD + 40, shipRect.y);
+    shipRect.y = Math.max(SAFE_PAD+30, shipRect.y);
+  }
+
+  function shipToScreen(nx, ny){
+    return { x: shipRect.x + nx*shipRect.w, y: shipRect.y + ny*shipRect.h };
+  }
+  function screenToShip(x, y){
+    return { nx: (x-shipRect.x)/shipRect.w, ny: (y-shipRect.y)/shipRect.h };
   }
 
   // =============================
-  // Gameplay geometry in ship-local normalized coords
-  // Everything in leaks/player stored as [0..1] coords over the ship image
-  // so scaling & placement never breaks.
+  // GAME STATE
   // =============================
+  // Tighten leaks to hull only (no cabin/deck)
+  // This is the BIG change vs your current version.
+  const HULL_BAND = { top: 0.66, bot: 0.94 }; // lower hull only
 
-  // Hull band constraint (keep leaks on black/red hull; avoid superstructure)
-  // Values are percentages down the image.
-  const HULL_BAND = { top: 0.50, bot: 0.92 };  // tweak if needed
-
-  function shipToScreen(nx, ny) {
-    return {
-      x: shipRect.x + nx * shipRect.w,
-      y: shipRect.y + ny * shipRect.h
-    };
-  }
-  function screenToShip(x, y) {
-    return {
-      nx: (x - shipRect.x) / shipRect.w,
-      ny: (y - shipRect.y) / shipRect.h
-    };
-  }
-
-  function onShipOpaque(nx, ny) {
-    if (!shipReady || !shipMaskData) return true; // fallback
-    const u = nx * shipMaskCanvas.width;
-    const v = ny * shipMaskCanvas.height;
-    return alphaAt(u, v) > 35;
-  }
-
-  function inHullBand(nx, ny) {
-    return ny >= HULL_BAND.top && ny <= HULL_BAND.bot;
-  }
-
-  function validLeakSpot(nx, ny) {
-    if (nx < 0.03 || nx > 0.97) return false;
-    if (!inHullBand(nx, ny)) return false;
-    if (!onShipOpaque(nx, ny)) return false;
-
-    // also avoid extremely bright deck area by biasing deeper into hull
-    return true;
-  }
-
-  // =============================
-  // Game state
-  // =============================
   const state = {
-    running: false,
-    paused: false,
-    demo: false,
-    sound: true,
-
-    startMs: 0,
-    nowMs: 0,
-    bestMs: 0,
-
-    // Flooding / integrity
-    water: 0.08,     // 0..1 (relative)
-    hull: 1.0,       // 0..1
-
-    // player position stored in ship normalized coords
-    player: { nx: 0.44, ny: 0.78, r: 0.018, speed: 0.40 },
-
-    // leaks stored normalized coords
-    leaks: [], // {nx, ny, t, fixed, progress}
-    spawnTimer: 0,
-    spawnInterval: 2.7, // seconds, decreases slightly
-
-    // sinking animation
-    dead: false,
-    sinkT: 0, // 0..1
-    sinkStartMs: 0,
-    finalTimeMs: 0,
-    awaitingSave: false,
+    running:false, paused:false, demo:false, sound:true,
+    startMs:0, bestMs:0,
+    water:0.08, hull:1.0,
+    player:{ nx:0.44, ny:0.84, r:0.018, speed:0.40 },
+    leaks:[], // {nx, ny, t, fixed, progress}
+    spawnTimer:0,
+    spawnInterval:2.6,
+    dead:false,
+    sinkT:0,
+    sinkStartMs:0,
+    finalTimeMs:0,
+    awaitingSave:false,
+    // hover patch UI
+    hoverLeakIndex:-1,
   };
 
-  // =============================
-  // Inputs
-  // =============================
-  const keys = new Set();
-  window.addEventListener('keydown', (e) => {
-    if (e.code === 'KeyP') {
-      state.paused = !state.paused;
-      e.preventDefault();
-      return;
-    }
-    if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) {
-      e.preventDefault();
-    }
-    keys.add(e.code);
-  }, { passive:false });
+  function nowMs(){ return performance.now(); }
 
-  window.addEventListener('keyup', (e) => keys.delete(e.code), { passive:true });
+  function reset(start=false){
+    state.running=!!start;
+    state.paused=false;
+    state.demo=false;
+    state.dead=false;
+    state.sinkT=0;
+    state.sinkStartMs=0;
+    state.finalTimeMs=0;
+    state.awaitingSave=false;
+    ui.saveRow.style.display='none';
 
-  // Buttons
-  ui.btnStart.onclick = () => reset(true);
-  ui.btnDemo.onclick = () => { state.demo = !state.demo; toast(state.demo ? 'Demo Autoplay: ON' : 'Demo Autoplay: OFF'); };
-  ui.btnSound.onclick = () => { state.sound = !state.sound; ui.btnSound.textContent = `Sound: ${state.sound ? 'On' : 'Off'}`; };
-  ui.btnPanic.onclick = () => panicPump();
-  ui.btnSave.onclick = () => {
-    const name = (ui.nameInput.value || '').trim();
-    if (!name) { toast('Enter a name/initials first'); return; }
+    state.water=0.08;
+    state.hull=1.0;
+    state.player.nx=0.44;
+    state.player.ny=0.84;
+
+    state.leaks=[];
+    state.spawnTimer=0;
+    state.spawnInterval=2.6;
+
+    state.startMs=nowMs();
+    toast(start?'Run started':'Reset');
+  }
+
+  ui.btnStart.onclick=()=>reset(true);
+  ui.btnDemo.onclick=()=>{ state.demo=!state.demo; toast(state.demo?'Demo Autoplay: ON':'Demo Autoplay: OFF'); };
+  ui.btnSound.onclick=()=>{ state.sound=!state.sound; ui.btnSound.textContent=`Sound: ${state.sound?'On':'Off'}`; };
+  ui.btnPanic.onclick=()=>panicPump();
+  ui.btnSave.onclick=()=>{
+    const name=(ui.nameInput.value||'').trim();
+    if(!name){ toast('Enter a name/initials first'); return; }
     insertScore(name, state.finalTimeMs);
-    ui.saveRow.style.display = 'none';
-    state.awaitingSave = false;
+    ui.saveRow.style.display='none';
+    state.awaitingSave=false;
     toast('Saved!');
   };
 
-  // =============================
-  // Reset / start
-  // =============================
-  function reset(start=false) {
-    state.running = !!start;
-    state.paused = false;
-    state.dead = false;
-    state.sinkT = 0;
-    state.sinkStartMs = 0;
-    state.finalTimeMs = 0;
-    state.awaitingSave = false;
-    ui.saveRow.style.display = 'none';
+  function maybeDie(elapsedMs){
+    if (state.hull<=0.001 || state.water>=0.95){
+      state.dead=true;
+      state.sinkStartMs=nowMs();
+      state.finalTimeMs=Math.floor(elapsedMs);
+      state.bestMs=Math.max(state.bestMs||0, state.finalTimeMs);
+      ui.bestTime.textContent = state.bestMs ? fmtTime(state.bestMs) : '—';
 
-    state.water = 0.08;
-    state.hull = 1.0;
-
-    state.player.nx = 0.44;
-    state.player.ny = 0.78;
-
-    state.leaks = [];
-    state.spawnTimer = 0;
-    state.spawnInterval = 2.7;
-    state.demo = false;
-
-    state.startMs = performance.now();
-    toast(start ? 'Run started' : 'Reset');
-  }
-
-  // =============================
-  // Leak spawning
-  // =============================
-  function rand(a,b){ return a + Math.random()*(b-a); }
-
-  function spawnLeak() {
-    // Try random spots until valid or give up.
-    for (let i=0;i<180;i++) {
-      const nx = rand(0.08, 0.92);
-      const ny = rand(HULL_BAND.top, HULL_BAND.bot);
-
-      if (!validLeakSpot(nx, ny)) continue;
-
-      // keep a little spacing from existing leaks
-      let ok = true;
-      for (const L of state.leaks) {
-        const dx = nx - L.nx, dy = ny - L.ny;
-        if (dx*dx + dy*dy < 0.010) { ok = false; break; }
+      if (maybeQualifyScore(state.finalTimeMs)){
+        state.awaitingSave=true;
+        ui.saveRow.style.display='flex';
+        ui.nameInput.value='';
+        ui.nameInput.focus();
+      } else {
+        state.awaitingSave=false;
+        ui.saveRow.style.display='none';
       }
-      if (!ok) continue;
-
-      state.leaks.push({ nx, ny, t: 0, fixed:false, progress:0 });
-      return;
+      toast('SHIP LOST');
     }
   }
 
-  // =============================
-  // Pumping
-  // =============================
-  function pump(amount, damage) {
-    state.water = Math.max(0, state.water - amount);
-    state.hull = Math.max(0, state.hull - damage);
+  function pump(amount, damage){
+    state.water=Math.max(0, state.water-amount);
+    state.hull=Math.max(0, state.hull-damage);
   }
-
-  function panicPump() {
-    if (!state.running || state.dead) return;
+  function panicPump(){
+    if(!state.running || state.dead) return;
     pump(0.16, 0.08);
     toast('PANIC PUMP!');
   }
 
-  // =============================
-  // Toast helper
-  // =============================
-  let toastTO = null;
-  function toast(msg, ms=1600){
-    ui.toast.textContent = msg;
-    ui.toast.style.display = 'block';
-    clearTimeout(toastTO);
-    toastTO = setTimeout(()=> ui.toast.style.display = 'none', ms);
+  function rand(a,b){ return a+Math.random()*(b-a); }
+
+  function inHullBand(nx,ny){
+    return ny>=HULL_BAND.top && ny<=HULL_BAND.bot;
   }
 
-  // =============================
-  // Update loop
-  // =============================
-  let last = performance.now();
-  function tick(now) {
-    const dt = Math.min(0.05, (now - last) / 1000);
-    last = now;
+  function validLeakSpot(nx,ny){
+    if (nx<0.06||nx>0.94) return false;
+    if (!inHullBand(nx,ny)) return false;
 
-    rebuildShipRect();
+    // must be opaque ship pixel
+    if (shipReady && alphaAt(nx,ny) <= 35) return false;
 
-    state.nowMs = now;
-
-    if (state.running && !state.paused) {
-      if (!state.dead) updateLive(dt);
-      else updateSink(dt);
+    // must be "dark enough" (reject bright cabin/deck pixels)
+    if (shipReady){
+      const {r,g,b} = rgbAt(nx,ny);
+      const L = luminance(r,g,b);
+      if (L > 120) return false; // too bright = deck/cabins
     }
-
-    draw();
-    requestAnimationFrame(tick);
-  }
-  requestAnimationFrame(tick);
-
-  function updateLive(dt) {
-    // time
-    const elapsed = nowMs() - state.startMs;
-
-    // spawn leaks
-    state.spawnTimer += dt;
-    const targetInt = Math.max(0.85, state.spawnInterval - elapsed/1000 * 0.010);
-    if (state.spawnTimer >= targetInt) {
-      state.spawnTimer = 0;
-      spawnLeak();
-    }
-
-    // movement
-    let mx = 0, my = 0;
-
-    if (state.demo) {
-      // demo tries to move toward nearest leak, else cruise
-      const target = nearestLeak();
-      if (target) {
-        const dx = target.nx - state.player.nx;
-        const dy = target.ny - state.player.ny;
-        const mag = Math.hypot(dx,dy) || 1;
-        mx = dx / mag;
-        my = dy / mag;
-      } else {
-        mx = Math.sin(elapsed/800);
-        my = 0.15*Math.cos(elapsed/900);
-      }
-    } else {
-      if (keys.has('ArrowLeft') || keys.has('KeyA')) mx -= 1;
-      if (keys.has('ArrowRight')|| keys.has('KeyD')) mx += 1;
-      if (keys.has('ArrowUp')   || keys.has('KeyW')) my -= 1;
-      if (keys.has('ArrowDown') || keys.has('KeyS')) my += 1;
-    }
-
-    const mag = Math.hypot(mx,my);
-    if (mag > 0) { mx/=mag; my/=mag; }
-
-    const speed = state.player.speed * dt; // normalized per second
-    state.player.nx += mx * speed;
-    state.player.ny += my * speed;
-
-    // keep player inside hull band + opaque pixels
-    clampPlayerToHull();
-
-    // autopatch
-    const patchRadius = state.player.r * 1.45;
-    for (const L of state.leaks) {
-      if (L.fixed) continue;
-      const dx = L.nx - state.player.nx;
-      const dy = L.ny - state.player.ny;
-      const dist = Math.hypot(dx,dy);
-
-      if (dist < patchRadius) {
-        L.progress += dt * 0.85; // time to patch
-      } else {
-        L.progress = Math.max(0, L.progress - dt*0.35);
-      }
-
-      if (L.progress >= 1) {
-        L.fixed = true;
-      }
-    }
-
-    // remove fixed leaks gradually
-    state.leaks = state.leaks.filter(L => !(L.fixed && L.t > 1.0));
-    for (const L of state.leaks) L.t += dt;
-
-    // flooding mechanics:
-    // water rises from active leaks (more if leak is below current waterline)
-    let leakCount = 0;
-    for (const L of state.leaks) {
-      if (L.fixed) continue;
-      leakCount++;
-
-      // if leak is below current waterline, it floods faster
-      const leakDepthBonus = (L.ny > (HULL_BAND.top + (HULL_BAND.bot - HULL_BAND.top)*state.water)) ? 1.25 : 1.0;
-      state.water += dt * (0.012 * leakDepthBonus);
-      state.hull  -= dt * (0.0032 * leakDepthBonus);
-    }
-
-    // natural hull decay with high water
-    state.hull -= dt * (state.water * 0.0020);
-
-    // pump action
-    const pumping = keys.has('Space');
-    if (pumping) {
-      pump(0.030 * dt, 0.010 * dt); // drains but damages
-    }
-
-    // clamp
-    state.water = Math.max(0, Math.min(1, state.water));
-    state.hull  = Math.max(0, Math.min(1, state.hull));
-
-    // death condition: hull too low OR water too high
-    if (state.hull <= 0.001 || state.water >= 0.95) {
-      die(elapsed);
-    }
-
-    // UI
-    ui.runTime.textContent = fmtTime(elapsed);
-    ui.leaksCount.textContent = String(leakCount);
-
-    const waterPct = Math.round(state.water * 100);
-    ui.waterPct.textContent = `${waterPct}%`;
-    ui.waterBar.style.width = `${waterPct}%`;
-
-    const hullPct = Math.round(state.hull * 100);
-    ui.hullPct.textContent = `${hullPct}%`;
-    ui.hullBar.style.width = `${hullPct}%`;
-
-    ui.bestTime.textContent = state.bestMs ? fmtTime(state.bestMs) : '—';
+    return true;
   }
 
-  function nowMs(){ return performance.now(); }
+  function spawnLeak(){
+    for(let i=0;i<240;i++){
+      const nx=rand(0.08,0.92);
+      const ny=rand(HULL_BAND.top,HULL_BAND.bot);
+      if(!validLeakSpot(nx,ny)) continue;
 
-  function nearestLeak() {
-    let best = null, bestD = 1e9;
-    for (const L of state.leaks) {
-      if (L.fixed) continue;
-      const dx = L.nx - state.player.nx;
-      const dy = L.ny - state.player.ny;
-      const d = dx*dx + dy*dy;
-      if (d < bestD) { bestD = d; best = L; }
+      // spacing
+      let ok=true;
+      for(const L of state.leaks){
+        const dx=nx-L.nx, dy=ny-L.ny;
+        if(dx*dx+dy*dy < 0.010){ ok=false; break; }
+      }
+      if(!ok) continue;
+
+      state.leaks.push({ nx, ny, t:0, fixed:false, progress:0 });
+      return;
+    }
+  }
+
+  function nearestLeak(){
+    let best=-1, bestD=1e9;
+    for(let i=0;i<state.leaks.length;i++){
+      const L=state.leaks[i];
+      if(L.fixed) continue;
+      const dx=L.nx-state.player.nx;
+      const dy=L.ny-state.player.ny;
+      const d=dx*dx+dy*dy;
+      if(d<bestD){ bestD=d; best=i; }
     }
     return best;
   }
 
-  function clampPlayerToHull() {
-    // hard clamp to band + ship bounds
-    state.player.nx = Math.max(0.06, Math.min(0.94, state.player.nx));
-    state.player.ny = Math.max(HULL_BAND.top+0.02, Math.min(HULL_BAND.bot-0.02, state.player.ny));
+  function clampPlayer(){
+    state.player.nx=Math.max(0.06,Math.min(0.94,state.player.nx));
+    state.player.ny=Math.max(HULL_BAND.top+0.02,Math.min(HULL_BAND.bot-0.02,state.player.ny));
 
-    if (!shipReady || !shipMaskData) return;
+    if (!shipReady) return;
+    if (alphaAt(state.player.nx, state.player.ny) > 35) return;
 
-    // if player lands on transparent pixel, nudge around
-    if (onShipOpaque(state.player.nx, state.player.ny)) return;
+    // nudge to nearest opaque pixel
+    const r=0.022;
+    for(let a=0;a<28;a++){
+      const ang=(a/28)*Math.PI*2;
+      const nx=state.player.nx+Math.cos(ang)*r;
+      const ny=state.player.ny+Math.sin(ang)*r;
+      if(!inHullBand(nx,ny)) continue;
+      if(alphaAt(nx,ny)>35){ state.player.nx=nx; state.player.ny=ny; return; }
+    }
+  }
 
-    // small radial search
-    const r = 0.020;
-    for (let a=0;a<24;a++) {
-      const ang = (a/24)*Math.PI*2;
-      const nx = state.player.nx + Math.cos(ang)*r;
-      const ny = state.player.ny + Math.sin(ang)*r;
-      if (!inHullBand(nx, ny)) continue;
-      if (onShipOpaque(nx, ny)) {
-        state.player.nx = nx; state.player.ny = ny;
-        return;
+  function updateLive(dt){
+    const elapsed = nowMs() - state.startMs;
+
+    // spawn
+    state.spawnTimer += dt;
+    const targetInt = Math.max(0.90, state.spawnInterval - (elapsed/1000)*0.010);
+    if (state.spawnTimer >= targetInt){
+      state.spawnTimer = 0;
+      spawnLeak();
+    }
+
+    // move
+    let mx=0,my=0;
+    if (state.demo){
+      const idx=nearestLeak();
+      if (idx>=0){
+        const T=state.leaks[idx];
+        const dx=T.nx-state.player.nx;
+        const dy=T.ny-state.player.ny;
+        const m=Math.hypot(dx,dy)||1;
+        mx=dx/m; my=dy/m;
+      } else {
+        mx=Math.sin(elapsed/800); my=0.18*Math.cos(elapsed/1000);
+      }
+    } else {
+      if(keys.has('ArrowLeft')||keys.has('KeyA')) mx-=1;
+      if(keys.has('ArrowRight')||keys.has('KeyD')) mx+=1;
+      if(keys.has('ArrowUp')||keys.has('KeyW')) my-=1;
+      if(keys.has('ArrowDown')||keys.has('KeyS')) my+=1;
+    }
+    const mag=Math.hypot(mx,my);
+    if(mag>0){ mx/=mag; my/=mag; }
+
+    const speed = state.player.speed*dt;
+    state.player.nx += mx*speed;
+    state.player.ny += my*speed;
+    clampPlayer();
+
+    // autopatch logic (timer stays on PLAYER ring now)
+    state.hoverLeakIndex = -1;
+    const patchRadius = state.player.r*1.55;
+
+    for (let i=0;i<state.leaks.length;i++){
+      const L=state.leaks[i];
+      if(L.fixed) continue;
+      const dx=L.nx-state.player.nx;
+      const dy=L.ny-state.player.ny;
+      const dist=Math.hypot(dx,dy);
+
+      if(dist < patchRadius){
+        state.hoverLeakIndex = i; // strongest target = last inside, good enough
+        L.progress += dt*0.85;
+      } else {
+        L.progress = Math.max(0, L.progress - dt*0.35);
+      }
+
+      if(L.progress >= 1){
+        L.fixed = true;
       }
     }
-  }
 
-  function die(elapsedMs) {
-    state.dead = true;
-    state.running = true;
-    state.sinkT = 0;
-    state.sinkStartMs = performance.now();
-    state.finalTimeMs = Math.max(0, Math.floor(elapsedMs));
+    // aging / cleanup
+    for(const L of state.leaks) L.t += dt;
+    state.leaks = state.leaks.filter(L => !(L.fixed && L.t>1.2));
 
-    state.bestMs = Math.max(state.bestMs || 0, state.finalTimeMs);
-    ui.bestTime.textContent = fmtTime(state.bestMs);
+    // flooding
+    let active=0;
 
-    // leaderboard qualify
-    if (maybeQualifyScore(state.finalTimeMs)) {
-      state.awaitingSave = true;
-      ui.saveRow.style.display = 'flex';
-      ui.nameInput.value = '';
-      ui.nameInput.focus();
-    } else {
-      ui.saveRow.style.display = 'none';
-      state.awaitingSave = false;
+    // waterline in ship coords within hull band
+    const bandH = (HULL_BAND.bot - HULL_BAND.top);
+    const waterNY = HULL_BAND.bot - bandH*state.water;
+
+    for(const L of state.leaks){
+      if(L.fixed) continue;
+      active++;
+      const underwater = L.ny > waterNY;
+      const bonus = underwater ? 1.30 : 1.0;
+      state.water += dt*(0.012*bonus);
+      state.hull  -= dt*(0.0032*bonus);
     }
 
-    toast('SHIP LOST');
+    state.hull -= dt*(state.water*0.0020);
+
+    // pump
+    if(keys.has('Space')) pump(0.030*dt, 0.010*dt);
+
+    state.water = Math.max(0, Math.min(1, state.water));
+    state.hull  = Math.max(0, Math.min(1, state.hull));
+
+    // UI
+    ui.runTime.textContent = fmtTime(elapsed);
+    ui.leaksCount.textContent = String(active);
+
+    const wp=Math.round(state.water*100);
+    ui.waterPct.textContent = `${wp}%`;
+    ui.waterBar.style.width = `${wp}%`;
+
+    const hp=Math.round(state.hull*100);
+    ui.hullPct.textContent = `${hp}%`;
+    ui.hullBar.style.width = `${hp}%`;
+
+    ui.bestTime.textContent = state.bestMs ? fmtTime(state.bestMs) : '—';
+
+    maybeDie(elapsed);
   }
 
-  function updateSink(dt) {
-    // sink over ~3.0 seconds
-    const t = Math.min(1, (performance.now() - state.sinkStartMs) / 3000);
+  function updateSink(dt){
+    const t = Math.min(1, (nowMs()-state.sinkStartMs)/3000);
     state.sinkT = t;
   }
 
   // =============================
-  // Rendering
+  // DRAW
   // =============================
-  function draw() {
-    // background gradient
+  function draw(){
     ctx.clearRect(0,0,W,H);
+
+    // sky gradient
     const g = ctx.createLinearGradient(0,0,0,H);
-    g.addColorStop(0, '#030718');
-    g.addColorStop(0.55, '#06112a');
-    g.addColorStop(1, '#02060f');
-    ctx.fillStyle = g;
+    g.addColorStop(0,'#030718');
+    g.addColorStop(0.55,'#06112a');
+    g.addColorStop(1,'#02060f');
+    ctx.fillStyle=g;
     ctx.fillRect(0,0,W,H);
 
     drawStars();
     drawClouds();
     drawOcean();
 
-    // ship (with sink transform)
-    drawShipWithOverlays();
-
-    // overlay text that must NEVER go underwater
-    drawTopOverlay();
+    rebuildShipRect();
+    drawShipAndGameplay();
     drawDeathOverlay();
   }
 
-  function drawStars() {
+  function drawStars(){
     ctx.save();
-    ctx.globalAlpha = 0.55;
-    // simple deterministic starfield
-    const n = 140;
-    for (let i=0;i<n;i++) {
-      const x = (i*127.13 % 1) * W;
-      const y = (i*91.77 % 1) * (H*0.65);
-      const r = 0.7 + ((i*13.33)%1)*1.1;
-      ctx.fillStyle = 'rgba(235,245,255,.8)';
-      ctx.beginPath();
-      ctx.arc(x,y,r,0,Math.PI*2);
-      ctx.fill();
+    ctx.globalAlpha=0.55;
+    const n=140;
+    for(let i=0;i<n;i++){
+      const x=(i*127.13%1)*W;
+      const y=(i*91.77%1)*(H*0.65);
+      const r=0.7+((i*13.33)%1)*1.1;
+      ctx.fillStyle='rgba(235,245,255,.8)';
+      ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
     }
     ctx.restore();
   }
 
-  function drawClouds() {
-    // subtle banded clouds near top
+  function drawClouds(){
     ctx.save();
-    ctx.globalAlpha = 0.28;
-    ctx.fillStyle = '#a7b7d8';
-    const baseY = H*0.10;
-    const t = performance.now()/1000;
-    for (let layer=0; layer<2; layer++) {
-      const y = baseY + layer*60;
-      const sp = (layer===0? 16 : 10);
-      const off = (t*sp) % 240;
-      for (let i=-1; i<Math.ceil(W/240)+2; i++) {
-        cloudBlob(i*240 - off, y, 240, 56 + layer*10);
+    ctx.globalAlpha=0.26;
+    ctx.fillStyle='#a7b7d8';
+    const baseY=H*0.10;
+    const t=nowMs()/1000;
+    for(let layer=0;layer<2;layer++){
+      const y=baseY+layer*60;
+      const sp=(layer===0?16:10);
+      const off=(t*sp)%240;
+      for(let i=-1;i<Math.ceil(W/240)+2;i++){
+        cloudBlob(i*240-off,y,240,56+layer*10);
       }
     }
     ctx.restore();
 
-    function cloudBlob(x,y,w,h) {
+    function cloudBlob(x,y,w,h){
       ctx.beginPath();
-      ctx.ellipse(x+w*0.33, y, w*0.33, h*0.55, 0, 0, Math.PI*2);
-      ctx.ellipse(x+w*0.58, y+h*0.12, w*0.35, h*0.60, 0, 0, Math.PI*2);
-      ctx.ellipse(x+w*0.78, y, w*0.28, h*0.48, 0, 0, Math.PI*2);
+      ctx.ellipse(x+w*0.33,y,w*0.33,h*0.55,0,0,Math.PI*2);
+      ctx.ellipse(x+w*0.58,y+h*0.12,w*0.35,h*0.60,0,0,Math.PI*2);
+      ctx.ellipse(x+w*0.78,y,w*0.28,h*0.48,0,0,Math.PI*2);
       ctx.fill();
     }
   }
 
-  function drawOcean() {
-    // horizon
+  function drawOcean(){
     ctx.save();
     const horizonY = H*0.62;
     const gg = ctx.createLinearGradient(0,horizonY,0,H);
-    gg.addColorStop(0, 'rgba(15,50,110,.35)');
-    gg.addColorStop(1, 'rgba(5,18,40,.95)');
-    ctx.fillStyle = gg;
+    gg.addColorStop(0,'rgba(15,50,110,.35)');
+    gg.addColorStop(1,'rgba(5,18,40,.95)');
+    ctx.fillStyle=gg;
     ctx.fillRect(0,horizonY,W,H-horizonY);
 
-    // wave lines
-    ctx.globalAlpha = 0.38;
-    ctx.strokeStyle = 'rgba(210,235,255,.35)';
-    ctx.lineWidth = 1.25;
-    const t = performance.now()/1000;
-    for (let i=0;i<10;i++) {
-      const y = horizonY + 24 + i*44;
+    ctx.globalAlpha=0.38;
+    ctx.strokeStyle='rgba(210,235,255,.35)';
+    ctx.lineWidth=1.25;
+    const t=nowMs()/1000;
+    for(let i=0;i<10;i++){
+      const y=horizonY+24+i*44;
       ctx.beginPath();
-      for (let x=0;x<=W;x+=24) {
-        const yy = y + Math.sin((x/120) + t*0.8 + i)*6;
-        ctx.lineTo(x, yy);
+      for(let x=0;x<=W;x+=24){
+        const yy=y+Math.sin((x/120)+t*0.8+i)*6;
+        ctx.lineTo(x,yy);
       }
       ctx.stroke();
     }
     ctx.restore();
   }
 
-  function drawShipWithOverlays() {
-    // ship transform for sinking animation
+  function drawShipAndGameplay(){
     const sink = state.dead ? state.sinkT : 0;
-    const bob = state.dead ? 0 : Math.sin(performance.now()/900)*2;
+    const bob  = state.dead ? 0 : Math.sin(nowMs()/900)*2;
 
-    // pivot at center of ship rect
     const cx = shipRect.x + shipRect.w*0.52;
     const cy = shipRect.y + shipRect.h*0.66;
 
-    // sink motion: move down, slight roll, fade
-    const dy = sink * (H*0.42);
-    const rot = sink * 0.10; // radians
+    const dy = sink*(H*0.42);
+    const rot = sink*0.10;
     const fade = 1 - sink*0.65;
 
     ctx.save();
     ctx.translate(cx, cy + bob + dy);
     ctx.rotate(rot);
     ctx.translate(-cx, -cy);
-
     ctx.globalAlpha = fade;
 
-    // draw ship image
-    if (shipReady) {
-      ctx.drawImage(shipImg, shipRect.x, shipRect.y, shipRect.w, shipRect.h);
-    } else {
-      drawFallbackShip();
+    // Ship image (processed)
+    if (shipReady){
+      ctx.drawImage(shipTex, shipRect.x, shipRect.y, shipRect.w, shipRect.h);
     }
 
-    // Draw water INSIDE ship (mask using ship alpha)
-    drawInternalWaterMasked(sink, fade);
+    // water inside ship (masked)
+    drawInternalWater(fade);
 
-    // Draw leaks + player on top (so always visible)
-    drawLeaksAndPlayer(sink, fade);
+    // leaks + player always visible
+    drawLeaksAndPlayer(fade);
 
     ctx.restore();
   }
 
-  function drawFallbackShip() {
-    // simple silhouette fallback
-    ctx.save();
-    ctx.fillStyle = 'rgba(10,14,22,.85)';
-    ctx.strokeStyle = 'rgba(255,255,255,.10)';
-    ctx.lineWidth = 3;
-    const x=shipRect.x, y=shipRect.y, w=shipRect.w, h=shipRect.h;
-    ctx.beginPath();
-    ctx.roundRect(x+w*0.10, y+h*0.55, w*0.80, h*0.30, 40);
-    ctx.fill(); ctx.stroke();
-    ctx.restore();
-  }
-
-  function drawInternalWaterMasked(sink, fade) {
-    // waterline in ship normalized coords within hull band
-    // water=0 means bottom of hull band, water=1 means top of hull band
+  function drawInternalWater(fade){
     const bandH = (HULL_BAND.bot - HULL_BAND.top);
-    const waterNY = HULL_BAND.bot - bandH * state.water;
-
-    // draw water rectangle in screen space where ship is, then mask to ship alpha
-    const waterY = shipRect.y + waterNY * shipRect.h;
+    const waterNY = HULL_BAND.bot - bandH*state.water;
+    const waterY = shipRect.y + waterNY*shipRect.h;
 
     ctx.save();
+    const grad = ctx.createLinearGradient(0,waterY,0,shipRect.y+shipRect.h);
+    grad.addColorStop(0,'rgba(40,120,255,.30)');
+    grad.addColorStop(1,'rgba(5,25,60,.70)');
+    ctx.fillStyle=grad;
+    ctx.fillRect(shipRect.x-40, waterY, shipRect.w+80, shipRect.y+shipRect.h-waterY+60);
 
-    // water fill
-    const grad = ctx.createLinearGradient(0, waterY, 0, shipRect.y + shipRect.h);
-    grad.addColorStop(0, 'rgba(40,120,255,.30)');
-    grad.addColorStop(1, 'rgba(5,25,60,.70)');
-    ctx.fillStyle = grad;
-
-    // draw big rect covering ship bottom
-    ctx.fillRect(shipRect.x-30, waterY, shipRect.w+60, shipRect.y + shipRect.h - waterY + 40);
-
-    // mask: keep only where ship pixels exist
-    if (shipReady) {
-      ctx.globalCompositeOperation = 'destination-in';
-      ctx.drawImage(shipImg, shipRect.x, shipRect.y, shipRect.w, shipRect.h);
-      ctx.globalCompositeOperation = 'source-over';
+    if (shipReady){
+      ctx.globalCompositeOperation='destination-in';
+      ctx.drawImage(shipTex, shipRect.x, shipRect.y, shipRect.w, shipRect.h);
+      ctx.globalCompositeOperation='source-over';
     }
 
-    // dotted waterline edge (inside ship)
-    ctx.globalAlpha = Math.min(1, 0.55 * fade);
-    ctx.strokeStyle = 'rgba(200,235,255,.55)';
-    ctx.lineWidth = 2;
+    ctx.globalAlpha = Math.min(1, 0.55*fade);
+    ctx.strokeStyle='rgba(200,235,255,.55)';
+    ctx.lineWidth=2;
     ctx.setLineDash([7,7]);
     ctx.beginPath();
     ctx.moveTo(shipRect.x, waterY);
-    ctx.lineTo(shipRect.x + shipRect.w, waterY);
+    ctx.lineTo(shipRect.x+shipRect.w, waterY);
     ctx.stroke();
     ctx.setLineDash([]);
-
     ctx.restore();
   }
 
-  function drawLeaksAndPlayer(sink, fade) {
-    // waterline y in ship normalized coords
+  function drawLeaksAndPlayer(fade){
     const bandH = (HULL_BAND.bot - HULL_BAND.top);
-    const waterNY = HULL_BAND.bot - bandH * state.water;
+    const waterNY = HULL_BAND.bot - bandH*state.water;
 
-    // leaks
-    for (const L of state.leaks) {
-      const p = shipToScreen(L.nx, L.ny);
+    // leaks (NO progress ring here anymore)
+    for (const L of state.leaks){
+      const p=shipToScreen(L.nx,L.ny);
+      const r=shipRect.w*0.020;
 
-      // round leak radius scales with ship
-      const r = shipRect.w * 0.020;
-
-      // visibility boost if underwater
       const underwater = L.ny > waterNY;
       const a = L.fixed ? Math.max(0, 1 - (L.t-0.7)) : 1;
 
-      // ring
       ctx.save();
-      ctx.globalAlpha = (0.95 * a) * fade;
-      ctx.lineWidth = Math.max(2, shipRect.w * 0.003);
+      ctx.globalAlpha=(0.95*a)*fade;
+      ctx.lineWidth=Math.max(2, shipRect.w*0.003);
 
-      // glow
       ctx.shadowColor = underwater ? 'rgba(120,220,255,.85)' : 'rgba(160,120,255,.70)';
-      ctx.shadowBlur = underwater ? 22 : 16;
+      ctx.shadowBlur  = underwater ? 22 : 16;
 
       ctx.strokeStyle = underwater ? 'rgba(90,210,255,.95)' : 'rgba(200,140,255,.90)';
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, r, 0, Math.PI*2);
-      ctx.stroke();
+      ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2); ctx.stroke();
 
-      // inner ring (patch progress)
-      if (!L.fixed) {
-        ctx.shadowBlur = 0;
-        ctx.strokeStyle = 'rgba(255,240,120,.90)';
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, r*0.62, -Math.PI/2, -Math.PI/2 + Math.PI*2*Math.min(1,L.progress));
-        ctx.stroke();
-      } else {
-        // patched: solid cap
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = 'rgba(255,240,120,.88)';
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, r*0.58, 0, Math.PI*2);
-        ctx.fill();
+      // patched fill
+      if (L.fixed){
+        ctx.shadowBlur=0;
+        ctx.fillStyle='rgba(255,240,120,.88)';
+        ctx.beginPath(); ctx.arc(p.x,p.y,r*0.58,0,Math.PI*2); ctx.fill();
       }
 
       ctx.restore();
 
-      // underwater indicator ping at waterline if leak is below it (so you still "see" it)
-      if (!L.fixed && underwater) {
-        const ping = shipToScreen(L.nx, waterNY);
+      // underwater ping at waterline
+      if (!L.fixed && underwater){
+        const ping=shipToScreen(L.nx, waterNY);
         ctx.save();
-        ctx.globalAlpha = 0.75 * fade;
-        ctx.fillStyle = 'rgba(90,210,255,.95)';
-        ctx.beginPath();
-        ctx.arc(ping.x, ping.y, r*0.35, 0, Math.PI*2);
-        ctx.fill();
+        ctx.globalAlpha=0.75*fade;
+        ctx.fillStyle='rgba(90,210,255,.95)';
+        ctx.beginPath(); ctx.arc(ping.x,ping.y,r*0.35,0,Math.PI*2); ctx.fill();
         ctx.restore();
       }
     }
 
     // player
-    const P = shipToScreen(state.player.nx, state.player.ny);
-    const pr = shipRect.w * state.player.r;
+    const P=shipToScreen(state.player.nx,state.player.ny);
+    const pr=shipRect.w*state.player.r;
 
     ctx.save();
-    ctx.globalAlpha = 0.95 * fade;
-    ctx.fillStyle = 'rgba(245,250,255,.95)';
-    ctx.shadowColor = 'rgba(120,200,255,.55)';
-    ctx.shadowBlur = 16;
-    ctx.beginPath();
-    ctx.arc(P.x, P.y, pr, 0, Math.PI*2);
-    ctx.fill();
+    ctx.globalAlpha=0.95*fade;
+
+    // base player dot
+    ctx.fillStyle='rgba(245,250,255,.95)';
+    ctx.shadowColor='rgba(120,200,255,.55)';
+    ctx.shadowBlur=16;
+    ctx.beginPath(); ctx.arc(P.x,P.y,pr,0,Math.PI*2); ctx.fill();
+
+    // hover ring (always)
+    ctx.shadowBlur=0;
+    ctx.lineWidth=Math.max(2, shipRect.w*0.003);
+    ctx.strokeStyle='rgba(140,200,255,.75)';
+    ctx.beginPath(); ctx.arc(P.x,P.y,pr*1.65,0,Math.PI*2); ctx.stroke();
+
+    // PATCH TIMER ON PLAYER RING (what you asked for)
+    if (state.hoverLeakIndex >= 0){
+      const L = state.leaks[state.hoverLeakIndex];
+      const prog = Math.max(0, Math.min(1, L.progress));
+      ctx.strokeStyle='rgba(255,240,120,.95)';
+      ctx.beginPath();
+      ctx.arc(P.x, P.y, pr*1.65, -Math.PI/2, -Math.PI/2 + Math.PI*2*prog);
+      ctx.stroke();
+    }
+
     ctx.restore();
   }
 
-  function drawTopOverlay() {
-    // keep overlay readable, never underwater because it's UI layer
-    // (handled by HTML)
-  }
+  function drawDeathOverlay(){
+    if(!state.dead) return;
 
-  function drawDeathOverlay() {
-    if (!state.dead) return;
-
-    // screen-space overlay (NOT ship-space) so it won't get lost underwater
-    const t = state.sinkT;
-
+    const t=state.sinkT;
     ctx.save();
-    ctx.globalAlpha = Math.min(1, 0.35 + t*0.65);
-    ctx.fillStyle = 'rgba(0,0,0,.35)';
+    ctx.globalAlpha=Math.min(1,0.35+t*0.65);
+    ctx.fillStyle='rgba(0,0,0,.35)';
     ctx.fillRect(0,0,W,H);
 
-    ctx.globalAlpha = Math.min(1, 0.75 + t*0.25);
-    ctx.fillStyle = 'rgba(235,244,255,.92)';
-    ctx.font = '800 64px system-ui, -apple-system, Segoe UI, Roboto, Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    ctx.globalAlpha=Math.min(1,0.75+t*0.25);
+    ctx.fillStyle='rgba(235,244,255,.92)';
+    ctx.font='800 64px system-ui, -apple-system, Segoe UI, Roboto, Arial';
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
     ctx.fillText('SHIP LOST', W*0.46, H*0.52);
 
-    ctx.globalAlpha = 0.85;
-    ctx.font = '600 18px system-ui, -apple-system, Segoe UI, Roboto, Arial';
-    const msg = `Survived: ${fmtTime(state.finalTimeMs)}  •  Best: ${fmtTime(state.bestMs)}`;
-    ctx.fillText(msg, W*0.46, H*0.52 + 60);
+    ctx.globalAlpha=0.85;
+    ctx.font='600 18px system-ui, -apple-system, Segoe UI, Roboto, Arial';
+    ctx.fillText(`Survived: ${fmtTime(state.finalTimeMs)}  •  Best: ${fmtTime(state.bestMs)}`, W*0.46, H*0.52+60);
 
-    ctx.globalAlpha = 0.70;
-    ctx.font = '600 16px system-ui, -apple-system, Segoe UI, Roboto, Arial';
-    ctx.fillText('Click Start / Restart to try again', W*0.46, H*0.52 + 92);
+    ctx.globalAlpha=0.70;
+    ctx.font='600 16px system-ui, -apple-system, Segoe UI, Roboto, Arial';
+    ctx.fillText('Click Start / Restart to try again', W*0.46, H*0.52+92);
     ctx.restore();
   }
 
-  // =============================
-  // Start initial state
-  // =============================
-  reset(false);
+  // MAIN LOOP
+  let last=nowMs();
+  function tick(){
+    const n=nowMs();
+    const dt=Math.min(0.05,(n-last)/1000);
+    last=n;
 
+    if(state.running && !state.paused){
+      if(!state.dead) updateLive(dt);
+      else updateSink(dt);
+    }
+    draw();
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  // Start
+  reset(false);
 })();
 </script>
 </body>
