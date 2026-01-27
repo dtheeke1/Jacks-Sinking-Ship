@@ -3,945 +3,1021 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>SinkShift — Ship Sinking Survival</title>
+  <title>SinkShift — ship sinking survival</title>
   <style>
-    :root{
-      --ink:#e7eefc;
-      --muted:#aab8dd;
-      --line:rgba(190,220,255,.18);
-      --panel:rgba(10,16,38,.62);
-      --panel2:rgba(9,14,34,.50);
-      --btn:rgba(18,30,70,.78);
-      --btnLine:rgba(90,140,255,.30);
-    }
-    html,body{height:100%; margin:0; overflow:hidden; background:#050817; color:var(--ink);
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial,sans-serif;
-    }
-    canvas#c{position:fixed; inset:0; width:100vw; height:100vh; display:block; background:#050817;}
-    .topbar{
-      position:fixed; left:18px; top:14px; z-index:10;
-      display:flex; flex-direction:column; gap:2px;
-      pointer-events:none;
-      text-shadow: 0 8px 28px rgba(0,0,0,.65);
-    }
-    .titleRow{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;}
-    .title{font-weight:800; letter-spacing:.3px; font-size:22px;}
-    .pill{
-      font-size:12px; padding:4px 10px; border-radius:999px;
-      border:1px solid var(--line); color:var(--muted); background:rgba(255,255,255,.04);
-      white-space:nowrap;
-    }
-    .sub{font-size:13px; color:var(--muted);}
+    html, body { height:100%; margin:0; background:#050913; overflow:hidden; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+    canvas { display:block; width:100vw; height:100vh; }
 
-    .hud{
-      position:fixed; right:16px; top:14px; z-index:20;
-      width:360px; max-width: calc(100vw - 32px);
-      background:linear-gradient(180deg, var(--panel), var(--panel2));
-      border:1px solid var(--line);
-      border-radius:16px;
-      box-shadow: 0 20px 80px rgba(0,0,0,.55);
-      padding:12px;
+    /* HUD */
+    .hud {
+      position: fixed;
+      top: 14px;
+      right: 14px;
+      width: 360px;
+      max-width: calc(100vw - 28px);
+      color: rgba(235,244,255,.92);
+      background: rgba(12,18,34,.52);
+      border: 1px solid rgba(130,170,255,.18);
+      border-radius: 16px;
+      padding: 12px;
       backdrop-filter: blur(10px);
+      box-shadow: 0 10px 40px rgba(0,0,0,.35);
+      z-index: 5;
+      user-select:none;
     }
-    .row{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;}
-    .k{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; color:#cfe0ff;}
-    .hintPill{
-      font-size:12px; padding:4px 8px; border-radius:999px;
-      border:1px solid var(--line); color:var(--muted); background:rgba(255,255,255,.03);
-      white-space:nowrap;
+    .hud .row { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+    .pill {
+      display:inline-flex; align-items:center; gap:8px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.08);
+      font-size: 12px;
+      opacity:.95;
     }
-    .stat{
-      display:grid; grid-template-columns: 1fr auto; gap:8px;
-      font-size:13px; padding:9px;
-      border-radius:14px;
-      border:1px solid rgba(190,220,255,.14);
-      background:rgba(255,255,255,.03);
-      margin-bottom:10px;
+    .title {
+      position: fixed;
+      left: 14px;
+      top: 12px;
+      z-index: 5;
+      color: rgba(235,244,255,.92);
+      user-select:none;
     }
-    .mini{font-size:12px; color:var(--muted); grid-column:1/3; line-height:1.25;}
-    .bar{height:10px; border-radius:999px; background:rgba(255,255,255,.08); overflow:hidden; border:1px solid rgba(255,255,255,.08); grid-column:1/3;}
-    .bar > div{height:100%; width:0%;}
-    .btns{display:flex; gap:8px; flex-wrap:wrap; margin-top:6px;}
-    button{
-      appearance:none; border:1px solid var(--btnLine); background:var(--btn); color:var(--ink);
-      padding:9px 10px; border-radius:12px;
-      cursor:pointer; font-weight:750; letter-spacing:.2px;
-      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    .title h1 { margin:0; font-size: 22px; letter-spacing:.2px; display:flex; align-items:center; gap:10px; }
+    .title .sub { margin-top:2px; font-size: 13px; opacity:.75; }
+    .barwrap { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08); border-radius: 999px; overflow:hidden; height: 12px; }
+    .bar { height:100%; width:0%; background: linear-gradient(90deg, rgba(60,220,140,.95), rgba(255,205,70,.95), rgba(255,90,100,.95)); }
+    .section { margin-top:10px; padding-top:10px; border-top: 1px solid rgba(255,255,255,.10); }
+    .btnrow { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+    button {
+      border-radius: 12px;
+      border: 1px solid rgba(150,190,255,.22);
+      background: rgba(20,32,70,.55);
+      color: rgba(235,244,255,.92);
+      padding: 8px 10px;
+      cursor: pointer;
+      font-weight: 650;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.05);
     }
-    button:hover{filter:brightness(1.12)}
-    button:active{transform:translateY(1px)}
-    button.primary{background:rgba(26,56,120,.78); border-color:rgba(120,170,255,.45);}
-    button.danger{background:rgba(70,18,34,.72); border-color:rgba(255,120,160,.40);}
-    .help{margin-top:10px; font-size:12px; color:var(--muted); line-height:1.35;}
-
-    .lbTitle{margin:10px 0 6px; font-weight:800; letter-spacing:.2px; font-size:12px; color:rgba(231,238,252,.92);}
-    .lbList{display:flex; flex-direction:column; gap:6px;}
-    .lbRow{
-      display:grid; grid-template-columns: 22px 1fr auto; gap:8px;
-      font-size:12px; padding:7px 8px; border-radius:12px;
-      border:1px solid rgba(190,220,255,.12);
-      background:rgba(255,255,255,.03);
-      align-items:center;
+    button:hover { background: rgba(26,44,98,.60); }
+    button.danger { border-color: rgba(255,120,130,.35); background: rgba(90,25,35,.60); }
+    button.danger:hover { background: rgba(115,32,45,.65); }
+    .tiny { font-size: 12px; opacity:.80; line-height:1.25; }
+    .lb { margin-top:8px; }
+    .lb h3 { margin: 6px 0 6px; font-size: 13px; letter-spacing:.4px; opacity:.9; }
+    .lb .item {
+      display:flex; justify-content:space-between; align-items:center;
+      padding: 7px 8px;
+      border-radius: 10px;
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(255,255,255,.07);
+      margin-bottom:6px;
+      font-size: 12px;
     }
-    .lbRank{color:rgba(170,190,235,.9)}
-    .lbName{color:rgba(231,238,252,.92); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-    .lbScore{color:#cfe0ff; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
-
-    .submitWrap{
-      margin-top:10px;
-      padding:10px;
-      border-radius:14px;
-      border:1px solid rgba(190,220,255,.14);
-      background:rgba(255,255,255,.03);
-      display:none;
-      gap:8px;
-    }
-    .submitWrap.show{display:grid;}
-    .submitWrap label{font-size:12px; color:var(--muted);}
-    .submitRow{display:flex; gap:8px; align-items:center;}
-    input[type="text"]{
-      width:100%;
-      padding:9px 10px;
-      border-radius:12px;
-      border:1px solid rgba(190,220,255,.18);
-      background:rgba(8,12,26,.6);
-      color:rgba(231,238,252,.95);
+    .lb .item b { letter-spacing:.4px; }
+    .saveRow { display:flex; gap:8px; margin-top:8px; }
+    .saveRow input {
+      flex:1;
+      border-radius: 12px;
+      border: 1px solid rgba(150,190,255,.22);
+      background: rgba(0,0,0,.22);
+      color: rgba(235,244,255,.92);
+      padding: 8px 10px;
       outline:none;
+      font-weight:650;
+      text-transform: uppercase;
     }
-    input[type="text"]::placeholder{color:rgba(170,190,235,.6)}
-    .submitNote{font-size:11px; color:rgba(170,190,235,.75); line-height:1.25;}
-
-    @media (max-width: 980px){
-      .hud{left:14px; right:14px; top:auto; bottom:14px; width:auto;}
-      .topbar{left:14px; top:10px;}
+    .toast {
+      position: fixed;
+      left: 14px;
+      bottom: 14px;
+      z-index: 6;
+      color: rgba(235,244,255,.92);
+      background: rgba(12,18,34,.55);
+      border: 1px solid rgba(130,170,255,.18);
+      border-radius: 14px;
+      padding: 10px 12px;
+      max-width: 520px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 10px 40px rgba(0,0,0,.35);
+      user-select:none;
+      font-size: 13px;
+      opacity:.92;
     }
   </style>
 </head>
-
 <body>
-  <canvas id="c"></canvas>
-
-  <div class="topbar">
-    <div class="titleRow">
-      <div class="title">SinkShift</div>
-      <div class="pill">ship sinking survival</div>
-      <div class="pill">WASD/Arrows • Space Pump • P Pause</div>
-    </div>
+  <div class="title">
+    <h1>SinkShift <span class="pill">ship sinking survival</span> <span class="pill">WASD/Arrows • Space Pump • P Pause</span></h1>
     <div class="sub">Stand on a leak to auto-patch • Keep the waterline below the deck</div>
   </div>
 
-  <aside class="hud">
+  <div class="hud" id="hud">
     <div class="row">
-      <div class="hintPill">Run: <span class="k" id="t">0:00</span></div>
-      <div class="hintPill">Best: <span class="k" id="best">—</span></div>
+      <span class="pill">Run: <b id="runTime">0:00</b></span>
+      <span class="pill">Best: <b id="bestTime">—</b></span>
     </div>
 
-    <div class="stat">
-      <div>Waterline</div>
-      <div id="waterPct" class="k">0%</div>
-      <div class="bar"><div id="waterBar"></div></div>
+    <div class="section">
+      <div class="row"><b>Waterline</b><span id="waterPct">0%</span></div>
+      <div class="barwrap"><div class="bar" id="waterBar"></div></div>
     </div>
 
-    <div class="stat">
-      <div>Leaks</div>
-      <div id="leaks" class="k">0</div>
-      <div class="mini">Leaks spawn over time. Standing on one patches it after a moment.</div>
+    <div class="section">
+      <div class="row"><b>Leaks</b><span id="leaksCount">0</span></div>
+      <div class="tiny">Leaks spawn over time. Standing on one patches it after a moment.</div>
     </div>
 
-    <div class="stat">
-      <div>Hull integrity</div>
-      <div id="hull" class="k">100%</div>
-      <div class="bar"><div id="hullBar"></div></div>
-    </div>
+    <div class="section">
+      <div class="row"><b>Hull integrity</b><span id="hullPct">100%</span></div>
+      <div class="barwrap"><div class="bar" id="hullBar"></div></div>
 
-    <div class="btns">
-      <button class="primary" id="startBtn">Start / Restart</button>
-      <button id="demoBtn">Demo Autoplay</button>
-      <button id="muteBtn">Sound: On</button>
-      <button class="danger" id="panicBtn">Panic Pump</button>
-    </div>
+      <div class="btnrow">
+        <button id="btnStart">Start / Restart</button>
+        <button id="btnDemo">Demo Autoplay</button>
+        <button id="btnSound">Sound: On</button>
+        <button class="danger" id="btnPanic">Panic Pump</button>
+      </div>
 
-    <div class="help">
-      Pump (Space): drains water but strains hull.<br/>
-      Panic Pump: big drain + big damage.
-    </div>
-
-    <div class="lbTitle">LEADERBOARD (TOP 5)</div>
-    <div class="lbList" id="lbList"></div>
-
-    <div class="submitWrap" id="submitWrap">
-      <div>
-        <label for="nameInput">New score! Enter name / initials</label>
-        <div class="submitRow" style="margin-top:6px;">
-          <input id="nameInput" type="text" maxlength="12" placeholder="DAVID" />
-          <button id="saveScoreBtn" class="primary">Save</button>
-        </div>
-        <div class="submitNote">Saved locally in this browser (Top 5 only).</div>
+      <div class="tiny" style="margin-top:8px">
+        Pump (Space): drains water but strains hull.<br/>
+        Panic Pump: big drain + big damage.
       </div>
     </div>
-  </aside>
+
+    <div class="section lb">
+      <h3>LEADERBOARD (TOP 5)</h3>
+      <div id="lbList"></div>
+      <div class="saveRow" id="saveRow" style="display:none">
+        <input id="nameInput" maxlength="12" placeholder="Enter name/initials" />
+        <button id="btnSave">Save</button>
+      </div>
+      <div class="tiny" style="margin-top:6px; opacity:.7">Saved locally in this browser (Top 5 only).</div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" style="display:none"></div>
+
+  <canvas id="c"></canvas>
 
 <script>
 (() => {
-  // ---------------- Utils ----------------
-  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-  const lerp=(a,b,t)=>a+(b-a)*t;
-  const rand=(a,b)=>a+Math.random()*(b-a);
-  const perfNow=()=> (performance && performance.now) ? performance.now() : Date.now();
-  const fmtTime=(s)=>{ s=Math.max(0,Math.floor(s)); const m=Math.floor(s/60), r=s%60; return `${m}:${String(r).padStart(2,'0')}`; };
+  // =============================
+  // Globals / Canvas
+  // =============================
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d', { alpha: false });
 
-  // ---------------- Canvas ----------------
-  const c=document.getElementById('c');
-  const ctx=c.getContext('2d');
+  let W=0, H=0, DPR=1;
 
-  if (!ctx.roundRect) {
-    ctx.roundRect=function(x,y,w,h,r){
-      r=Math.min(r,w/2,h/2);
-      this.beginPath();
-      this.moveTo(x+r,y);
-      this.arcTo(x+w,y,x+w,y+h,r);
-      this.arcTo(x+w,y+h,x,y+h,r);
-      this.arcTo(x,y+h,x,y,r);
-      this.arcTo(x,y,x+w,y,r);
-      this.closePath();
-      return this;
+  function resize() {
+    DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    W = Math.floor(window.innerWidth);
+    H = Math.floor(window.innerHeight);
+    canvas.width = Math.floor(W * DPR);
+    canvas.height = Math.floor(H * DPR);
+    canvas.style.width = W+'px';
+    canvas.style.height = H+'px';
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  window.addEventListener('resize', resize, { passive:true });
+  resize();
+
+  // =============================
+  // UI refs
+  // =============================
+  const ui = {
+    runTime: document.getElementById('runTime'),
+    bestTime: document.getElementById('bestTime'),
+    waterPct: document.getElementById('waterPct'),
+    waterBar: document.getElementById('waterBar'),
+    leaksCount: document.getElementById('leaksCount'),
+    hullPct: document.getElementById('hullPct'),
+    hullBar: document.getElementById('hullBar'),
+    btnStart: document.getElementById('btnStart'),
+    btnDemo: document.getElementById('btnDemo'),
+    btnSound: document.getElementById('btnSound'),
+    btnPanic: document.getElementById('btnPanic'),
+    lbList: document.getElementById('lbList'),
+    saveRow: document.getElementById('saveRow'),
+    nameInput: document.getElementById('nameInput'),
+    btnSave: document.getElementById('btnSave'),
+    toast: document.getElementById('toast'),
+  };
+
+  function fmtTime(ms) {
+    const s = Math.max(0, Math.floor(ms/1000));
+    const m = Math.floor(s/60);
+    const r = s%60;
+    return `${m}:${String(r).padStart(2,'0')}`;
+  }
+
+  // =============================
+  // Leaderboard (localStorage)
+  // =============================
+  const LB_KEY = 'sinkshift_leaderboard_v1';
+  function loadLB() {
+    try {
+      const raw = localStorage.getItem(LB_KEY);
+      const arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr : [];
+    } catch { return []; }
+  }
+  function saveLB(arr) {
+    localStorage.setItem(LB_KEY, JSON.stringify(arr.slice(0,5)));
+  }
+  function renderLB() {
+    const lb = loadLB().slice(0,5);
+    ui.lbList.innerHTML = '';
+    lb.forEach((e, i) => {
+      const div = document.createElement('div');
+      div.className = 'item';
+      div.innerHTML = `<span>#${i+1} <b>${(e.name||'???').toUpperCase()}</b></span><span><b>${fmtTime(e.timeMs)}</b></span>`;
+      ui.lbList.appendChild(div);
+    });
+    if (lb.length === 0) {
+      const div = document.createElement('div');
+      div.className = 'item';
+      div.innerHTML = `<span style="opacity:.75">No scores yet</span><span>—</span>`;
+      ui.lbList.appendChild(div);
+    }
+  }
+  renderLB();
+
+  function maybeQualifyScore(timeMs) {
+    const lb = loadLB().slice(0,5);
+    if (lb.length < 5) return true;
+    const worst = lb[lb.length-1]?.timeMs ?? 0;
+    return timeMs > worst;
+  }
+
+  function insertScore(name, timeMs) {
+    const lb = loadLB().slice(0,5);
+    lb.push({ name: (name||'???').toUpperCase().slice(0,12), timeMs });
+    lb.sort((a,b)=> b.timeMs - a.timeMs);
+    saveLB(lb.slice(0,5));
+    renderLB();
+  }
+
+  // =============================
+  // Asset: ship.png mask
+  // =============================
+  const shipImg = new Image();
+  shipImg.src = './ship.png';
+
+  let shipMaskCanvas = document.createElement('canvas');
+  let shipMaskCtx = shipMaskCanvas.getContext('2d', { willReadFrequently:true });
+  let shipMaskData = null; // ImageData
+  let shipReady = false;
+
+  shipImg.onload = () => {
+    shipMaskCanvas.width = shipImg.naturalWidth;
+    shipMaskCanvas.height = shipImg.naturalHeight;
+    shipMaskCtx.clearRect(0,0,shipMaskCanvas.width, shipMaskCanvas.height);
+    shipMaskCtx.drawImage(shipImg, 0,0);
+    shipMaskData = shipMaskCtx.getImageData(0,0,shipMaskCanvas.width, shipMaskCanvas.height).data;
+    shipReady = true;
+    toast(`Loaded ship.png (${shipImg.naturalWidth}×${shipImg.naturalHeight})`);
+  };
+  shipImg.onerror = () => {
+    shipReady = false;
+    toast(`Couldn't load ship.png — using fallback ship`, 2500);
+  };
+
+  function alphaAt(u, v) {
+    if (!shipMaskData) return 0;
+    const x = Math.max(0, Math.min(shipMaskCanvas.width-1, Math.floor(u)));
+    const y = Math.max(0, Math.min(shipMaskCanvas.height-1, Math.floor(v)));
+    const i = (y * shipMaskCanvas.width + x) * 4 + 3;
+    return shipMaskData[i]; // alpha
+  }
+
+  // =============================
+  // Layout (fullscreen, ship big)
+  // =============================
+  const HUD_W = 380;      // reserve for HUD visually
+  const SAFE_PAD = 20;
+
+  // Ship rect in screen coords (computed each frame)
+  const shipRect = { x:0, y:0, w:0, h:0 };
+
+  // We draw ship centered-left and BIG.
+  function rebuildShipRect() {
+    const availW = Math.max(420, W - HUD_W - SAFE_PAD*2);
+    const availH = H - SAFE_PAD*2;
+
+    // target area (slightly larger than avail to feel big)
+    const targetW = availW * 1.05;
+    const targetH = availH * 0.72; // leave some sky above
+
+    // If image loaded, fit by aspect. If not, use fallback dims.
+    const iw = shipReady ? shipImg.naturalWidth : 1400;
+    const ih = shipReady ? shipImg.naturalHeight : 600;
+
+    const s = Math.min(targetW / iw, targetH / ih) * 1.10; // boost
+
+    shipRect.w = iw * s;
+    shipRect.h = ih * s;
+
+    // push ship forward (bigger + closer to camera)
+    shipRect.x = SAFE_PAD + (availW - shipRect.w) * 0.10;
+    shipRect.y = SAFE_PAD + (availH - shipRect.h) * 0.38; // sit lower
+
+    // clamp so it doesn't go off top
+    shipRect.y = Math.max(SAFE_PAD + 40, shipRect.y);
+  }
+
+  // =============================
+  // Gameplay geometry in ship-local normalized coords
+  // Everything in leaks/player stored as [0..1] coords over the ship image
+  // so scaling & placement never breaks.
+  // =============================
+
+  // Hull band constraint (keep leaks on black/red hull; avoid superstructure)
+  // Values are percentages down the image.
+  const HULL_BAND = { top: 0.50, bot: 0.92 };  // tweak if needed
+
+  function shipToScreen(nx, ny) {
+    return {
+      x: shipRect.x + nx * shipRect.w,
+      y: shipRect.y + ny * shipRect.h
+    };
+  }
+  function screenToShip(x, y) {
+    return {
+      nx: (x - shipRect.x) / shipRect.w,
+      ny: (y - shipRect.y) / shipRect.h
     };
   }
 
-  let W=0,H=0,DPR=1;
-  function resize(){
-    DPR = Math.min(2, window.devicePixelRatio || 1);
-    const cssW = window.innerWidth;
-    const cssH = window.innerHeight;
-    c.style.width = cssW+'px';
-    c.style.height= cssH+'px';
-    c.width  = Math.floor(cssW*DPR);
-    c.height = Math.floor(cssH*DPR);
-    ctx.setTransform(DPR,0,0,DPR,0,0);
-    W = cssW;
-    H = cssH;
-    rebuildLayout();
-  }
-  window.addEventListener('resize', resize);
-
-  // ---------------- UI ----------------
-  const elT=document.getElementById('t');
-  const elBest=document.getElementById('best');
-  const elLeaks=document.getElementById('leaks');
-  const elWaterPct=document.getElementById('waterPct');
-  const elWaterBar=document.getElementById('waterBar');
-  const elHull=document.getElementById('hull');
-  const elHullBar=document.getElementById('hullBar');
-
-  const startBtn=document.getElementById('startBtn');
-  const demoBtn=document.getElementById('demoBtn');
-  const muteBtn=document.getElementById('muteBtn');
-  const panicBtn=document.getElementById('panicBtn');
-
-  const lbListEl = document.getElementById('lbList');
-  const submitWrap = document.getElementById('submitWrap');
-  const nameInput = document.getElementById('nameInput');
-  const saveScoreBtn = document.getElementById('saveScoreBtn');
-
-  // ---------------- Sound ----------------
-  let audioCtx=null;
-  let soundOn=true;
-  function beep(freq=440,dur=0.05,vol=0.04){
-    if(!soundOn) return;
-    audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)();
-    const o=audioCtx.createOscillator();
-    const g=audioCtx.createGain();
-    o.type='sine'; o.frequency.value=freq; g.gain.value=vol;
-    o.connect(g); g.connect(audioCtx.destination);
-    o.start(); o.stop(audioCtx.currentTime+dur);
+  function onShipOpaque(nx, ny) {
+    if (!shipReady || !shipMaskData) return true; // fallback
+    const u = nx * shipMaskCanvas.width;
+    const v = ny * shipMaskCanvas.height;
+    return alphaAt(u, v) > 35;
   }
 
-  // ---------------- Leaderboard ----------------
-  const LS_BEST='sinkshift_best_seconds';
-  const LS_LB='sinkshift_top5_v1';
-  let best=Number(localStorage.getItem(LS_BEST)||0);
-  elBest.textContent = best ? fmtTime(best) : '—';
-
-  let top5 = [];
-  try{ top5 = JSON.parse(localStorage.getItem(LS_LB) || '[]') || []; } catch { top5 = []; }
-  top5 = Array.isArray(top5) ? top5 : [];
-  top5 = top5.filter(x=>x && typeof x.name==='string' && typeof x.score==='number');
-  top5.sort((a,b)=>b.score-a.score);
-  top5 = top5.slice(0,5);
-
-  function escapeHtml(s){
-    return String(s).replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
-  }
-  function renderLeaderboard(){
-    lbListEl.innerHTML = '';
-    const rows = top5.length ? top5 : [
-      {name:'—', score:0},{name:'—', score:0},{name:'—', score:0},{name:'—', score:0},{name:'—', score:0}
-    ];
-    rows.slice(0,5).forEach((r,i)=>{
-      const div=document.createElement('div');
-      div.className='lbRow';
-      div.innerHTML = `
-        <div class="lbRank">#${i+1}</div>
-        <div class="lbName">${escapeHtml(r.name || '—')}</div>
-        <div class="lbScore">${r.score ? fmtTime(r.score) : '—'}</div>
-      `;
-      lbListEl.appendChild(div);
-    });
-  }
-  function saveLeaderboard(){ localStorage.setItem(LS_LB, JSON.stringify(top5.slice(0,5))); }
-  renderLeaderboard();
-
-  // ---------------- Ship asset ----------------
-  const shipImg = new Image();
-  shipImg.src = 'ship.png';
-  shipImg.decoding = 'async';
-  shipImg.loading = 'eager';
-  let shipReady = false;
-  shipImg.onload = () => { shipReady = true; };
-  shipImg.onerror = () => { shipReady = false; };
-
-  // ===============================
-  // IMPORTANT ALIGNMENT CONSTANTS
-  // ===============================
-  // Base coordinate system the ship + gameplay live in.
-  // We now scale this up more aggressively to make the ship much bigger.
-  const BASE_W = 1280;
-  const BASE_H = 620;
-
-  // Where to draw ship.png inside BASE (big).
-  // (Centered and large; tweak only if needed.)
-  const SHIP_BOX = { x: 70, y: 85, w: 1120, h: 380 };
-
-  // Leak spawn region: ONLY the lower hull band (black/red area).
-  // This keeps leaks visible and on the ship.
-  const leakSpawnBox = { x: 240, y: 320, w: 760, h: 140 };
-
-  // Player movement bounds (also sits on hull band).
-  const playRect = { x: 240, y: 310, w: 760, h: 170 };
-
-  // Build a Path2D hull mask (used for clipping + spawn checks).
-  function buildHullMaskPath(){
-    // A generous hull silhouette that covers the lower ship body area.
-    // This is NOT a perfect pixel mask; it’s a gameplay mask.
-    const p = new Path2D();
-
-    // approximate hull curve (in BASE coords)
-    const x = 170, y = 230, w = 980, h = 260;
-    const bow = x + w*0.10;
-    const stern = x + w*0.97;
-    const deck = y + h*0.26;
-    const keel = y + h*0.92;
-
-    p.moveTo(bow, keel);
-    p.quadraticCurveTo(x + w*0.03, y + h*0.72, x + w*0.06, y + h*0.56);
-    p.quadraticCurveTo(x + w*0.13, y + h*0.34, x + w*0.22, deck);
-
-    p.lineTo(x + w*0.86, deck - h*0.02);
-    p.quadraticCurveTo(x + w*0.95, deck, stern, y + h*0.48);
-    p.quadraticCurveTo(x + w*0.99, y + h*0.70, x + w*0.92, keel);
-
-    p.closePath();
-    return p;
-  }
-  let hullMaskPath = buildHullMaskPath();
-
-  // ---------------- Layout ----------------
-  let shipGroup = { x: 40, y: 80, scale: 1 };
-
-  function rebuildLayout(){
-    const pad = Math.max(12, Math.min(34, W*0.02));
-    const hudReserve = (W < 980) ? 0 : 400;
-
-    // Use almost the whole screen left of HUD
-    const availW = Math.max(560, W - hudReserve - pad*2);
-    const availH = Math.max(480, H - pad*2);
-
-    // Make ship BIG: try to fill width and most of height.
-    const targetW = availW * 0.98;
-    const targetH = availH * 0.92;
-
-    const s = Math.min(targetW / BASE_W, targetH / BASE_H);
-
-    shipGroup.scale = s;
-    shipGroup.x = pad + 6;
-    shipGroup.y = Math.max(pad, (H - BASE_H*s)/2 - 6);
+  function inHullBand(nx, ny) {
+    return ny >= HULL_BAND.top && ny <= HULL_BAND.bot;
   }
 
-  // ---------------- Game State ----------------
-  const ship = { tilt: 0, sink: 0 };
-  const shipTarget = { tilt: 0, sink: 0 };
+  function validLeakSpot(nx, ny) {
+    if (nx < 0.03 || nx > 0.97) return false;
+    if (!inHullBand(nx, ny)) return false;
+    if (!onShipOpaque(nx, ny)) return false;
 
-  const player = { x: playRect.x + playRect.w*0.55, y: playRect.y + playRect.h*0.55, r: 10, speed: 260, patching: 0, pumping: 0 };
-
-  let mode = 'attract'; // 'attract' | 'running' | 'dead'
-  let paused=false, demoMode=false;
-
-  let timeSurvived=0, water=0, hull=1;
-  let leaks=[], spawnTimer=0;
-
-  let deadTimer = 0;
-  let deathFinalized = false;
-
-  // ---------------- Spawn logic (INSIDE HULL ONLY) ----------------
-  function pointInHull(x,y){
-    // quick check inside the hull mask path
-    return ctx.isPointInPath(hullMaskPath, x, y);
+    // also avoid extremely bright deck area by biasing deeper into hull
+    return true;
   }
 
-  function spawnLeak(){
-    // Rejection sample within leakSpawnBox and inside hull mask.
-    for(let i=0;i<60;i++){
-      const x=rand(leakSpawnBox.x, leakSpawnBox.x+leakSpawnBox.w);
-      const y=rand(leakSpawnBox.y, leakSpawnBox.y+leakSpawnBox.h);
-      if(!pointInHull(x,y)) continue;
+  // =============================
+  // Game state
+  // =============================
+  const state = {
+    running: false,
+    paused: false,
+    demo: false,
+    sound: true,
 
-      const rate=rand(0.007,0.017)*(1+timeSurvived/85);
-      leaks.push({x,y,rate,patched:false, patchProg:0});
+    startMs: 0,
+    nowMs: 0,
+    bestMs: 0,
+
+    // Flooding / integrity
+    water: 0.08,     // 0..1 (relative)
+    hull: 1.0,       // 0..1
+
+    // player position stored in ship normalized coords
+    player: { nx: 0.44, ny: 0.78, r: 0.018, speed: 0.40 },
+
+    // leaks stored normalized coords
+    leaks: [], // {nx, ny, t, fixed, progress}
+    spawnTimer: 0,
+    spawnInterval: 2.7, // seconds, decreases slightly
+
+    // sinking animation
+    dead: false,
+    sinkT: 0, // 0..1
+    sinkStartMs: 0,
+    finalTimeMs: 0,
+    awaitingSave: false,
+  };
+
+  // =============================
+  // Inputs
+  // =============================
+  const keys = new Set();
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'KeyP') {
+      state.paused = !state.paused;
+      e.preventDefault();
       return;
     }
-    // fallback: if mask sampling fails, spawn center-lower hull
-    leaks.push({x: playRect.x + playRect.w*0.5, y: playRect.y + playRect.h*0.6, rate:0.012, patched:false, patchProg:0});
-  }
-
-  function resetGame(){
-    timeSurvived=0;
-    water=0.08;
-    hull=1;
-    leaks=[];
-    spawnTimer=0;
-    player.x = playRect.x + playRect.w*0.55;
-    player.y = playRect.y + playRect.h*0.55;
-    player.patching=0;
-    player.pumping=0;
-
-    mode='running';
-    paused=false;
-    deadTimer=0;
-    deathFinalized=false;
-
-    for(let i=0;i<2;i++) spawnLeak();
-
-    submitWrap.classList.remove('show');
-    beep(520,0.06,0.05);
-  }
-
-  // ---------------- Input ----------------
-  const keys=new Set();
-  window.addEventListener('keydown',(e)=>{
-    const k=e.key.toLowerCase();
-    if(e.key===' ') e.preventDefault();
-    keys.add(k===' ' ? 'space' : k);
-    if(k==='p'){
-      if(mode==='running') { paused=!paused; beep(paused?260:460,0.06,0.05); }
+    if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) {
+      e.preventDefault();
     }
-  });
-  window.addEventListener('keyup',(e)=>{
-    const k=e.key.toLowerCase();
-    keys.delete(k===' ' ? 'space' : k);
-  });
+    keys.add(e.code);
+  }, { passive:false });
 
-  // ---------------- Buttons ----------------
-  startBtn.addEventListener('click',()=>{ demoMode=false; resetGame(); });
-  demoBtn.addEventListener('click', ()=>{ demoMode=true;  resetGame(); });
-  muteBtn.addEventListener('click',()=>{
-    soundOn=!soundOn;
-    muteBtn.textContent=`Sound: ${soundOn?'On':'Off'}`;
-    if(soundOn) beep(600,0.05,0.05);
-  });
-  panicBtn.addEventListener('click',()=>{
-    if(mode!=='running' || paused) return;
-    water=clamp(water-0.16,0,1);
-    hull =clamp(hull-0.14,0,1);
-    player.pumping=Math.max(player.pumping,0.35);
-    beep(140,0.10,0.06);
-  });
+  window.addEventListener('keyup', (e) => keys.delete(e.code), { passive:true });
 
-  function nearestLeak(){
-    let bestL=null, bd=1e9;
-    for(const L of leaks){
-      if(L.patched) continue;
-      const d=Math.hypot(player.x-L.x, player.y-L.y);
-      if(d<bd){ bd=d; bestL=L; }
-    }
-    return {leak:bestL, dist:bd};
+  // Buttons
+  ui.btnStart.onclick = () => reset(true);
+  ui.btnDemo.onclick = () => { state.demo = !state.demo; toast(state.demo ? 'Demo Autoplay: ON' : 'Demo Autoplay: OFF'); };
+  ui.btnSound.onclick = () => { state.sound = !state.sound; ui.btnSound.textContent = `Sound: ${state.sound ? 'On' : 'Off'}`; };
+  ui.btnPanic.onclick = () => panicPump();
+  ui.btnSave.onclick = () => {
+    const name = (ui.nameInput.value || '').trim();
+    if (!name) { toast('Enter a name/initials first'); return; }
+    insertScore(name, state.finalTimeMs);
+    ui.saveRow.style.display = 'none';
+    state.awaitingSave = false;
+    toast('Saved!');
+  };
+
+  // =============================
+  // Reset / start
+  // =============================
+  function reset(start=false) {
+    state.running = !!start;
+    state.paused = false;
+    state.dead = false;
+    state.sinkT = 0;
+    state.sinkStartMs = 0;
+    state.finalTimeMs = 0;
+    state.awaitingSave = false;
+    ui.saveRow.style.display = 'none';
+
+    state.water = 0.08;
+    state.hull = 1.0;
+
+    state.player.nx = 0.44;
+    state.player.ny = 0.78;
+
+    state.leaks = [];
+    state.spawnTimer = 0;
+    state.spawnInterval = 2.7;
+    state.demo = false;
+
+    state.startMs = performance.now();
+    toast(start ? 'Run started' : 'Reset');
   }
 
-  // ---------------- Score submit ----------------
-  let pendingScore = null;
+  // =============================
+  // Leak spawning
+  // =============================
+  function rand(a,b){ return a + Math.random()*(b-a); }
 
-  function commitScore(){
-    if(pendingScore == null) return;
-    const raw = (nameInput.value || '').trim();
-    const name = raw ? raw.toUpperCase().slice(0,12) : 'ANON';
-    top5.push({name, score: Number(pendingScore)});
-    top5.sort((a,b)=>b.score-a.score);
-    top5 = top5.slice(0,5);
-    saveLeaderboard();
-    renderLeaderboard();
-    submitWrap.classList.remove('show');
-    pendingScore = null;
-    beep(640,0.06,0.05);
-  }
-  saveScoreBtn.addEventListener('click', commitScore);
-  nameInput.addEventListener('keydown', (e)=>{
-    if(e.key === 'Enter'){ e.preventDefault(); commitScore(); }
-  });
+  function spawnLeak() {
+    // Try random spots until valid or give up.
+    for (let i=0;i<180;i++) {
+      const nx = rand(0.08, 0.92);
+      const ny = rand(HULL_BAND.top, HULL_BAND.bot);
 
-  function finalizeDeathOnce(){
-    if(deathFinalized) return;
-    deathFinalized = true;
+      if (!validLeakSpot(nx, ny)) continue;
 
-    beep(90,0.18,0.08);
-
-    if(timeSurvived>best){
-      best=timeSurvived;
-      localStorage.setItem(LS_BEST, String(Math.floor(best)));
-      elBest.textContent=fmtTime(best);
-    }
-
-    const qualifies = top5.length < 5 || timeSurvived > top5[top5.length-1].score;
-    if(qualifies){
-      submitWrap.classList.add('show');
-      nameInput.value = '';
-      nameInput.focus();
-      pendingScore = Math.floor(timeSurvived);
-    }
-  }
-
-  // ---------------- Update ----------------
-  function update(dt){
-    // Keep ship mostly straight; only mild tilt with damage/flood.
-    shipTarget.tilt = (water - 0.10) * 0.03 + (1 - hull) * 0.10;
-    shipTarget.sink = water*70 + (1-hull)*55;
-
-    if(mode==='running' && !paused){
-      timeSurvived += dt;
-
-      const targetInterval = clamp(6 - timeSurvived/40, 1.7, 6);
-      spawnTimer += dt;
-      if(spawnTimer>targetInterval){
-        spawnTimer=0;
-        if(leaks.filter(l=>!l.patched).length<10) spawnLeak();
+      // keep a little spacing from existing leaks
+      let ok = true;
+      for (const L of state.leaks) {
+        const dx = nx - L.nx, dy = ny - L.ny;
+        if (dx*dx + dy*dy < 0.010) { ok = false; break; }
       }
+      if (!ok) continue;
 
-      const waterTop = playRect.y + playRect.h*(1-water);
+      state.leaks.push({ nx, ny, t: 0, fixed:false, progress:0 });
+      return;
+    }
+  }
 
-      let inflow=0;
-      for(const L of leaks){
-        if(L.patched) continue;
-        // If leak is below current waterline, it floods faster.
-        const submerged = L.y > waterTop ? 1.35 : 0.8;
-        inflow += L.rate * submerged;
-        hull  -= dt * 0.0012 * submerged;
-      }
-      water += inflow * dt;
+  // =============================
+  // Pumping
+  // =============================
+  function pump(amount, damage) {
+    state.water = Math.max(0, state.water - amount);
+    state.hull = Math.max(0, state.hull - damage);
+  }
 
-      // passive drain
-      water -= dt * 0.001 * (0.6 + hull);
+  function panicPump() {
+    if (!state.running || state.dead) return;
+    pump(0.16, 0.08);
+    toast('PANIC PUMP!');
+  }
 
-      let ix=0, iy=0;
-      if(keys.has('arrowleft')||keys.has('a')) ix-=1;
-      if(keys.has('arrowright')||keys.has('d')) ix+=1;
-      if(keys.has('arrowup')||keys.has('w')) iy-=1;
-      if(keys.has('arrowdown')||keys.has('s')) iy+=1;
+  // =============================
+  // Toast helper
+  // =============================
+  let toastTO = null;
+  function toast(msg, ms=1600){
+    ui.toast.textContent = msg;
+    ui.toast.style.display = 'block';
+    clearTimeout(toastTO);
+    toastTO = setTimeout(()=> ui.toast.style.display = 'none', ms);
+  }
 
-      if(demoMode){
-        const {leak} = nearestLeak();
-        if(leak){
-          const dx=leak.x-player.x, dy=leak.y-player.y;
-          const mag=Math.hypot(dx,dy)||1;
-          ix = dx/mag; iy = dy/mag;
-        }
-      }
+  // =============================
+  // Update loop
+  // =============================
+  let last = performance.now();
+  function tick(now) {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
 
-      const mm=Math.hypot(ix,iy);
-      if(mm>1){ ix/=mm; iy/=mm; }
-      player.x += ix * player.speed * dt;
-      player.y += iy * player.speed * dt;
+    rebuildShipRect();
 
-      const pad = 18;
-      player.x = clamp(player.x, playRect.x+pad, playRect.x+playRect.w-pad);
-      player.y = clamp(player.y, playRect.y+pad, playRect.y+playRect.h-pad);
+    state.nowMs = now;
 
-      // autopatch (no E)
-      const {leak, dist} = nearestLeak();
-      const patchRange = 22;
-      if(leak && dist < patchRange){
-        player.patching += dt;
-        leak.patchProg = clamp(leak.patchProg + dt/0.65, 0, 1);
-        if(leak.patchProg >= 1){
-          leak.patched = true;
-          water = clamp(water - 0.02, 0, 1);
-          beep(820,0.05,0.05);
-        }
+    if (state.running && !state.paused) {
+      if (!state.dead) updateLive(dt);
+      else updateSink(dt);
+    }
+
+    draw();
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  function updateLive(dt) {
+    // time
+    const elapsed = nowMs() - state.startMs;
+
+    // spawn leaks
+    state.spawnTimer += dt;
+    const targetInt = Math.max(0.85, state.spawnInterval - elapsed/1000 * 0.010);
+    if (state.spawnTimer >= targetInt) {
+      state.spawnTimer = 0;
+      spawnLeak();
+    }
+
+    // movement
+    let mx = 0, my = 0;
+
+    if (state.demo) {
+      // demo tries to move toward nearest leak, else cruise
+      const target = nearestLeak();
+      if (target) {
+        const dx = target.nx - state.player.nx;
+        const dy = target.ny - state.player.ny;
+        const mag = Math.hypot(dx,dy) || 1;
+        mx = dx / mag;
+        my = dy / mag;
       } else {
-        player.patching = Math.max(0, player.patching - dt*1.8);
-        if(leak) leak.patchProg = Math.max(0, leak.patchProg - dt*2.2);
+        mx = Math.sin(elapsed/800);
+        my = 0.15*Math.cos(elapsed/900);
       }
-
-      const doPump = keys.has('space') || (demoMode && water>0.34);
-      if(doPump){
-        player.pumping += dt;
-        const eff = 0.040 * (0.55 + hull);
-        water=clamp(water-eff*dt,0,1);
-        hull =clamp(hull-dt*0.0022,0,1);
-        if(Math.random()<0.12) beep(220,0.02,0.02);
-      } else {
-        player.pumping = Math.max(0, player.pumping - dt*2.2);
-      }
-
-      hull -= dt * (0.0008 + water*0.0022);
-      water=clamp(water,0,1);
-      hull =clamp(hull,0,1);
-
-      if(water>0.90 || hull<=0){
-        mode='dead';
-        deadTimer=0;
-        finalizeDeathOnce();
-      }
-
-    } else if(mode==='dead'){
-      deadTimer += dt;
-      water = clamp(water + dt*0.12, 0, 1);
-      hull  = clamp(hull  - dt*0.08, 0, 1);
+    } else {
+      if (keys.has('ArrowLeft') || keys.has('KeyA')) mx -= 1;
+      if (keys.has('ArrowRight')|| keys.has('KeyD')) mx += 1;
+      if (keys.has('ArrowUp')   || keys.has('KeyW')) my -= 1;
+      if (keys.has('ArrowDown') || keys.has('KeyS')) my += 1;
     }
 
-    const deathBoost = (mode==='dead') ? clamp(deadTimer/2.2, 0, 1) : 0;
-    const targetTilt = shipTarget.tilt + deathBoost*0.18;
-    const targetSink = shipTarget.sink + deathBoost*240;
+    const mag = Math.hypot(mx,my);
+    if (mag > 0) { mx/=mag; my/=mag; }
 
-    ship.tilt = lerp(ship.tilt, targetTilt, (mode==='dead') ? 0.035 : 0.06);
-    ship.sink = lerp(ship.sink, targetSink, (mode==='dead') ? 0.025 : 0.05);
+    const speed = state.player.speed * dt; // normalized per second
+    state.player.nx += mx * speed;
+    state.player.ny += my * speed;
+
+    // keep player inside hull band + opaque pixels
+    clampPlayerToHull();
+
+    // autopatch
+    const patchRadius = state.player.r * 1.45;
+    for (const L of state.leaks) {
+      if (L.fixed) continue;
+      const dx = L.nx - state.player.nx;
+      const dy = L.ny - state.player.ny;
+      const dist = Math.hypot(dx,dy);
+
+      if (dist < patchRadius) {
+        L.progress += dt * 0.85; // time to patch
+      } else {
+        L.progress = Math.max(0, L.progress - dt*0.35);
+      }
+
+      if (L.progress >= 1) {
+        L.fixed = true;
+      }
+    }
+
+    // remove fixed leaks gradually
+    state.leaks = state.leaks.filter(L => !(L.fixed && L.t > 1.0));
+    for (const L of state.leaks) L.t += dt;
+
+    // flooding mechanics:
+    // water rises from active leaks (more if leak is below current waterline)
+    let leakCount = 0;
+    for (const L of state.leaks) {
+      if (L.fixed) continue;
+      leakCount++;
+
+      // if leak is below current waterline, it floods faster
+      const leakDepthBonus = (L.ny > (HULL_BAND.top + (HULL_BAND.bot - HULL_BAND.top)*state.water)) ? 1.25 : 1.0;
+      state.water += dt * (0.012 * leakDepthBonus);
+      state.hull  -= dt * (0.0032 * leakDepthBonus);
+    }
+
+    // natural hull decay with high water
+    state.hull -= dt * (state.water * 0.0020);
+
+    // pump action
+    const pumping = keys.has('Space');
+    if (pumping) {
+      pump(0.030 * dt, 0.010 * dt); // drains but damages
+    }
+
+    // clamp
+    state.water = Math.max(0, Math.min(1, state.water));
+    state.hull  = Math.max(0, Math.min(1, state.hull));
+
+    // death condition: hull too low OR water too high
+    if (state.hull <= 0.001 || state.water >= 0.95) {
+      die(elapsed);
+    }
 
     // UI
-    elT.textContent=fmtTime(timeSurvived);
-    elLeaks.textContent=String(leaks.filter(l=>!l.patched).length);
+    ui.runTime.textContent = fmtTime(elapsed);
+    ui.leaksCount.textContent = String(leakCount);
 
-    const wPct=Math.round(water*100);
-    elWaterPct.textContent=`${wPct}%`;
-    elWaterBar.style.width=`${wPct}%`;
-    elWaterBar.style.background = water<0.4 ? 'rgba(52,211,153,.95)' : (water<0.7 ? 'rgba(251,191,36,.95)' : 'rgba(251,113,133,.95)');
+    const waterPct = Math.round(state.water * 100);
+    ui.waterPct.textContent = `${waterPct}%`;
+    ui.waterBar.style.width = `${waterPct}%`;
 
-    const hPct=Math.round(hull*100);
-    elHull.textContent=`${hPct}%`;
-    elHullBar.style.width=`${hPct}%`;
-    elHullBar.style.background = hull>0.6 ? 'rgba(52,211,153,.95)' : (hull>0.3 ? 'rgba(251,191,36,.95)' : 'rgba(251,113,133,.95)');
+    const hullPct = Math.round(state.hull * 100);
+    ui.hullPct.textContent = `${hullPct}%`;
+    ui.hullBar.style.width = `${hullPct}%`;
+
+    ui.bestTime.textContent = state.bestMs ? fmtTime(state.bestMs) : '—';
   }
 
-  // ---------------- Rendering helpers ----------------
-  function rr(x,y,w,h,r,fill,stroke,lw=2){
-    ctx.beginPath();
-    ctx.roundRect(x,y,w,h,r);
-    if(fill){ ctx.fillStyle=fill; ctx.fill(); }
-    if(stroke){ ctx.strokeStyle=stroke; ctx.lineWidth=lw; ctx.stroke(); }
+  function nowMs(){ return performance.now(); }
+
+  function nearestLeak() {
+    let best = null, bestD = 1e9;
+    for (const L of state.leaks) {
+      if (L.fixed) continue;
+      const dx = L.nx - state.player.nx;
+      const dy = L.ny - state.player.ny;
+      const d = dx*dx + dy*dy;
+      if (d < bestD) { bestD = d; best = L; }
+    }
+    return best;
   }
 
-  function drawSky(t){
-    const g=ctx.createLinearGradient(0,0,0,H);
-    g.addColorStop(0,'#05091a');
-    g.addColorStop(0.55,'#071b43');
-    g.addColorStop(1,'#030612');
-    ctx.fillStyle=g;
+  function clampPlayerToHull() {
+    // hard clamp to band + ship bounds
+    state.player.nx = Math.max(0.06, Math.min(0.94, state.player.nx));
+    state.player.ny = Math.max(HULL_BAND.top+0.02, Math.min(HULL_BAND.bot-0.02, state.player.ny));
+
+    if (!shipReady || !shipMaskData) return;
+
+    // if player lands on transparent pixel, nudge around
+    if (onShipOpaque(state.player.nx, state.player.ny)) return;
+
+    // small radial search
+    const r = 0.020;
+    for (let a=0;a<24;a++) {
+      const ang = (a/24)*Math.PI*2;
+      const nx = state.player.nx + Math.cos(ang)*r;
+      const ny = state.player.ny + Math.sin(ang)*r;
+      if (!inHullBand(nx, ny)) continue;
+      if (onShipOpaque(nx, ny)) {
+        state.player.nx = nx; state.player.ny = ny;
+        return;
+      }
+    }
+  }
+
+  function die(elapsedMs) {
+    state.dead = true;
+    state.running = true;
+    state.sinkT = 0;
+    state.sinkStartMs = performance.now();
+    state.finalTimeMs = Math.max(0, Math.floor(elapsedMs));
+
+    state.bestMs = Math.max(state.bestMs || 0, state.finalTimeMs);
+    ui.bestTime.textContent = fmtTime(state.bestMs);
+
+    // leaderboard qualify
+    if (maybeQualifyScore(state.finalTimeMs)) {
+      state.awaitingSave = true;
+      ui.saveRow.style.display = 'flex';
+      ui.nameInput.value = '';
+      ui.nameInput.focus();
+    } else {
+      ui.saveRow.style.display = 'none';
+      state.awaitingSave = false;
+    }
+
+    toast('SHIP LOST');
+  }
+
+  function updateSink(dt) {
+    // sink over ~3.0 seconds
+    const t = Math.min(1, (performance.now() - state.sinkStartMs) / 3000);
+    state.sinkT = t;
+  }
+
+  // =============================
+  // Rendering
+  // =============================
+  function draw() {
+    // background gradient
+    ctx.clearRect(0,0,W,H);
+    const g = ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0, '#030718');
+    g.addColorStop(0.55, '#06112a');
+    g.addColorStop(1, '#02060f');
+    ctx.fillStyle = g;
     ctx.fillRect(0,0,W,H);
 
-    ctx.globalAlpha=0.20;
-    ctx.fillStyle='#cfe0ff';
-    for(let i=0;i<170;i++){
-      const x=(i*193)%W;
-      const y=(i*97)%H;
-      const s=((i*31)%2)+1;
-      ctx.fillRect(x, y*0.52, s, s);
-    }
-    ctx.globalAlpha=1;
+    drawStars();
+    drawClouds();
+    drawOcean();
+
+    // ship (with sink transform)
+    drawShipWithOverlays();
+
+    // overlay text that must NEVER go underwater
+    drawTopOverlay();
+    drawDeathOverlay();
   }
 
-  function drawClouds(t){
-    const baseY = 80;
-    const layers=[
-      {y:baseY,   a:0.13, sp:10, w:280, h:36},
-      {y:baseY+52,a:0.09, sp:16, w:240, h:30},
-    ];
-    for(const L of layers){
-      const off=(t*L.sp)%340;
-      ctx.globalAlpha=L.a;
-      ctx.fillStyle='#cfe0ff';
-      for(let i=-2;i<7;i++){
-        const x=i*320 - off;
-        cloud(x+190, L.y, L.w, L.h);
-      }
-    }
-    ctx.globalAlpha=1;
-
-    function cloud(cx,cy,w,h){
-      ctx.beginPath();
-      ctx.ellipse(cx,cy,w*0.45,h,0,0,Math.PI*2);
-      ctx.ellipse(cx-w*0.20,cy+8,w*0.28,h*0.85,0,0,Math.PI*2);
-      ctx.ellipse(cx+w*0.22,cy+10,w*0.30,h*0.78,0,0,Math.PI*2);
-      ctx.fill();
-    }
-  }
-
-  function drawOcean(t){
-    const top = H*0.62;
-    const g=ctx.createLinearGradient(0,top,0,H);
-    g.addColorStop(0,'rgba(40,120,255,.14)');
-    g.addColorStop(1,'rgba(10,35,80,.62)');
-    ctx.fillStyle=g;
-    ctx.fillRect(0,top,W,H-top);
-
-    ctx.globalAlpha=0.68;
-    ctx.strokeStyle='rgba(180,230,255,.22)';
-    ctx.lineWidth=2;
-    for(let k=0;k<6;k++){
-      const y=top + 18 + k*20;
-      ctx.beginPath();
-      for(let x=0;x<=W;x+=16){
-        const yy = y + Math.sin(x*0.012 + t*(1.3+k*0.18))* (4+k*0.9);
-        if(x===0) ctx.moveTo(x,yy); else ctx.lineTo(x,yy);
-      }
-      ctx.stroke();
-    }
-    ctx.globalAlpha=1;
-  }
-
-  function drawShipSprite(){
-    if(!shipReady){
-      // fallback while loading
-      ctx.globalAlpha=0.75;
-      ctx.fillStyle='rgba(231,238,252,.65)';
-      ctx.font='700 14px system-ui,-apple-system,Segoe UI,Roboto';
-      ctx.fillText('Loading ship.png…', 58, 60);
-      ctx.globalAlpha=1;
-      return;
-    }
-
-    const bx=SHIP_BOX.x, by=SHIP_BOX.y, bw=SHIP_BOX.w, bh=SHIP_BOX.h;
-    const iw=shipImg.naturalWidth || shipImg.width;
-    const ih=shipImg.naturalHeight || shipImg.height;
-
-    // aspect-fit into SHIP_BOX
-    const s = Math.min(bw/iw, bh/ih);
-    const dw = iw*s;
-    const dh = ih*s;
-    const dx = bx + (bw - dw)/2;
-    const dy = by + (bh - dh)/2;
-
-    ctx.drawImage(shipImg, dx, dy, dw, dh);
-  }
-
-  // ---------------- Gameplay drawing (clipped to HULL MASK) ----------------
-  function drawGameplay(t){
+  function drawStars() {
     ctx.save();
-    ctx.clip(hullMaskPath);
-
-    // subtle interior tint so gameplay reads “inside the ship”
-    ctx.globalAlpha=0.16;
-    rr(playRect.x-10, playRect.y-10, playRect.w+20, playRect.h+20, 22, 'rgba(120,170,255,.07)', 'rgba(210,235,255,.14)', 2);
-    ctx.globalAlpha=1;
-
-    const waterTop = playRect.y + playRect.h*(1-water);
-
-    // holes (round)
-    for(const L of leaks){
-      if(L.patched) continue;
-
-      // dark hole
-      ctx.fillStyle='rgba(0,0,0,.62)';
+    ctx.globalAlpha = 0.55;
+    // simple deterministic starfield
+    const n = 140;
+    for (let i=0;i<n;i++) {
+      const x = (i*127.13 % 1) * W;
+      const y = (i*91.77 % 1) * (H*0.65);
+      const r = 0.7 + ((i*13.33)%1)*1.1;
+      ctx.fillStyle = 'rgba(235,245,255,.8)';
       ctx.beginPath();
-      ctx.arc(L.x, L.y, 8.2, 0, Math.PI*2);
+      ctx.arc(x,y,r,0,Math.PI*2);
       ctx.fill();
-
-      // rim
-      ctx.strokeStyle = 'rgba(255,120,160,.65)';
-      ctx.lineWidth=2.2;
-      ctx.beginPath();
-      ctx.arc(L.x, L.y, 9.8, 0, Math.PI*2);
-      ctx.stroke();
     }
+    ctx.restore();
+  }
 
-    // water fill (within playRect)
-    ctx.fillStyle='rgba(30,120,255,.38)';
-    ctx.beginPath();
-    ctx.roundRect(playRect.x, waterTop, playRect.w, (playRect.y+playRect.h)-waterTop, 18);
-    ctx.fill();
-
-    // leak locator halos
+  function drawClouds() {
+    // subtle banded clouds near top
     ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    for(const L of leaks){
-      if(L.patched) continue;
-      const isTarget = Math.hypot(player.x-L.x, player.y-L.y) < 22;
-
-      const pulse = 0.5 + 0.5*Math.sin(t*5.2 + L.x*0.01);
-      const a = isTarget ? 0.65 : 0.38;
-
-      ctx.globalAlpha = a;
-      ctx.fillStyle = isTarget ? 'rgba(251,191,36,.95)' : 'rgba(120,220,255,.90)';
-      ctx.beginPath();
-      ctx.arc(L.x, L.y, 18 + pulse*6, 0, Math.PI*2);
-      ctx.fill();
-
-      ctx.globalAlpha = isTarget ? 0.95 : 0.60;
-      ctx.strokeStyle = isTarget ? 'rgba(251,191,36,.95)' : 'rgba(180,240,255,.85)';
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.arc(L.x, L.y, 16, 0, Math.PI*2);
-      ctx.stroke();
-
-      if(isTarget){
-        ctx.globalAlpha=1;
-        ctx.strokeStyle='rgba(251,191,36,.98)';
-        ctx.lineWidth=3.5;
-        ctx.beginPath();
-        ctx.arc(L.x, L.y, 16, -Math.PI/2, -Math.PI/2 + (Math.PI*2)*clamp(L.patchProg,0,1));
-        ctx.stroke();
+    ctx.globalAlpha = 0.28;
+    ctx.fillStyle = '#a7b7d8';
+    const baseY = H*0.10;
+    const t = performance.now()/1000;
+    for (let layer=0; layer<2; layer++) {
+      const y = baseY + layer*60;
+      const sp = (layer===0? 16 : 10);
+      const off = (t*sp) % 240;
+      for (let i=-1; i<Math.ceil(W/240)+2; i++) {
+        cloudBlob(i*240 - off, y, 240, 56 + layer*10);
       }
     }
     ctx.restore();
 
-    // player
-    ctx.fillStyle='rgba(0,0,0,.28)';
-    ctx.beginPath();
-    ctx.ellipse(player.x, player.y+10, 11, 5, 0, 0, Math.PI*2);
-    ctx.fill();
-
-    ctx.fillStyle='rgba(255,255,255,.94)';
-    ctx.beginPath();
-    ctx.arc(player.x,player.y,player.r,0,Math.PI*2);
-    ctx.fill();
-
-    if(player.pumping>0.02){
-      ctx.strokeStyle='rgba(52,211,153,.95)';
-      ctx.lineWidth=3;
+    function cloudBlob(x,y,w,h) {
       ctx.beginPath();
-      ctx.arc(player.x,player.y, 21 + Math.sin(perfNow()*0.011)*1.5, 0, Math.PI*2);
+      ctx.ellipse(x+w*0.33, y, w*0.33, h*0.55, 0, 0, Math.PI*2);
+      ctx.ellipse(x+w*0.58, y+h*0.12, w*0.35, h*0.60, 0, 0, Math.PI*2);
+      ctx.ellipse(x+w*0.78, y, w*0.28, h*0.48, 0, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  function drawOcean() {
+    // horizon
+    ctx.save();
+    const horizonY = H*0.62;
+    const gg = ctx.createLinearGradient(0,horizonY,0,H);
+    gg.addColorStop(0, 'rgba(15,50,110,.35)');
+    gg.addColorStop(1, 'rgba(5,18,40,.95)');
+    ctx.fillStyle = gg;
+    ctx.fillRect(0,horizonY,W,H-horizonY);
+
+    // wave lines
+    ctx.globalAlpha = 0.38;
+    ctx.strokeStyle = 'rgba(210,235,255,.35)';
+    ctx.lineWidth = 1.25;
+    const t = performance.now()/1000;
+    for (let i=0;i<10;i++) {
+      const y = horizonY + 24 + i*44;
+      ctx.beginPath();
+      for (let x=0;x<=W;x+=24) {
+        const yy = y + Math.sin((x/120) + t*0.8 + i)*6;
+        ctx.lineTo(x, yy);
+      }
       ctx.stroke();
     }
+    ctx.restore();
+  }
 
-    // waterline marker
-    ctx.strokeStyle='rgba(255,255,255,.22)';
-    ctx.setLineDash([6,6]);
+  function drawShipWithOverlays() {
+    // ship transform for sinking animation
+    const sink = state.dead ? state.sinkT : 0;
+    const bob = state.dead ? 0 : Math.sin(performance.now()/900)*2;
+
+    // pivot at center of ship rect
+    const cx = shipRect.x + shipRect.w*0.52;
+    const cy = shipRect.y + shipRect.h*0.66;
+
+    // sink motion: move down, slight roll, fade
+    const dy = sink * (H*0.42);
+    const rot = sink * 0.10; // radians
+    const fade = 1 - sink*0.65;
+
+    ctx.save();
+    ctx.translate(cx, cy + bob + dy);
+    ctx.rotate(rot);
+    ctx.translate(-cx, -cy);
+
+    ctx.globalAlpha = fade;
+
+    // draw ship image
+    if (shipReady) {
+      ctx.drawImage(shipImg, shipRect.x, shipRect.y, shipRect.w, shipRect.h);
+    } else {
+      drawFallbackShip();
+    }
+
+    // Draw water INSIDE ship (mask using ship alpha)
+    drawInternalWaterMasked(sink, fade);
+
+    // Draw leaks + player on top (so always visible)
+    drawLeaksAndPlayer(sink, fade);
+
+    ctx.restore();
+  }
+
+  function drawFallbackShip() {
+    // simple silhouette fallback
+    ctx.save();
+    ctx.fillStyle = 'rgba(10,14,22,.85)';
+    ctx.strokeStyle = 'rgba(255,255,255,.10)';
+    ctx.lineWidth = 3;
+    const x=shipRect.x, y=shipRect.y, w=shipRect.w, h=shipRect.h;
     ctx.beginPath();
-    ctx.moveTo(playRect.x, waterTop);
-    ctx.lineTo(playRect.x+playRect.w, waterTop);
+    ctx.roundRect(x+w*0.10, y+h*0.55, w*0.80, h*0.30, 40);
+    ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawInternalWaterMasked(sink, fade) {
+    // waterline in ship normalized coords within hull band
+    // water=0 means bottom of hull band, water=1 means top of hull band
+    const bandH = (HULL_BAND.bot - HULL_BAND.top);
+    const waterNY = HULL_BAND.bot - bandH * state.water;
+
+    // draw water rectangle in screen space where ship is, then mask to ship alpha
+    const waterY = shipRect.y + waterNY * shipRect.h;
+
+    ctx.save();
+
+    // water fill
+    const grad = ctx.createLinearGradient(0, waterY, 0, shipRect.y + shipRect.h);
+    grad.addColorStop(0, 'rgba(40,120,255,.30)');
+    grad.addColorStop(1, 'rgba(5,25,60,.70)');
+    ctx.fillStyle = grad;
+
+    // draw big rect covering ship bottom
+    ctx.fillRect(shipRect.x-30, waterY, shipRect.w+60, shipRect.y + shipRect.h - waterY + 40);
+
+    // mask: keep only where ship pixels exist
+    if (shipReady) {
+      ctx.globalCompositeOperation = 'destination-in';
+      ctx.drawImage(shipImg, shipRect.x, shipRect.y, shipRect.w, shipRect.h);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    // dotted waterline edge (inside ship)
+    ctx.globalAlpha = Math.min(1, 0.55 * fade);
+    ctx.strokeStyle = 'rgba(200,235,255,.55)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([7,7]);
+    ctx.beginPath();
+    ctx.moveTo(shipRect.x, waterY);
+    ctx.lineTo(shipRect.x + shipRect.w, waterY);
     ctx.stroke();
     ctx.setLineDash([]);
 
     ctx.restore();
   }
 
-  function drawGameOverOverlay(){
-    const s = shipGroup.scale;
-    const shipX = shipGroup.x;
-    const shipY = shipGroup.y + ship.sink;
+  function drawLeaksAndPlayer(sink, fade) {
+    // waterline y in ship normalized coords
+    const bandH = (HULL_BAND.bot - HULL_BAND.top);
+    const waterNY = HULL_BAND.bot - bandH * state.water;
 
-    const cx = shipX + s*(playRect.x + playRect.w*0.50);
-    const cy = shipY + s*(playRect.y + playRect.h*0.55);
+    // leaks
+    for (const L of state.leaks) {
+      const p = shipToScreen(L.nx, L.ny);
 
-    const w = Math.min(720, Math.max(460, W*0.42));
-    const h = 170;
+      // round leak radius scales with ship
+      const r = shipRect.w * 0.020;
 
-    const x = clamp(cx - w/2, 18, W - w - 18);
-    const y = clamp(cy - h/2, 90, H - h - 18);
+      // visibility boost if underwater
+      const underwater = L.ny > waterNY;
+      const a = L.fixed ? Math.max(0, 1 - (L.t-0.7)) : 1;
+
+      // ring
+      ctx.save();
+      ctx.globalAlpha = (0.95 * a) * fade;
+      ctx.lineWidth = Math.max(2, shipRect.w * 0.003);
+
+      // glow
+      ctx.shadowColor = underwater ? 'rgba(120,220,255,.85)' : 'rgba(160,120,255,.70)';
+      ctx.shadowBlur = underwater ? 22 : 16;
+
+      ctx.strokeStyle = underwater ? 'rgba(90,210,255,.95)' : 'rgba(200,140,255,.90)';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, Math.PI*2);
+      ctx.stroke();
+
+      // inner ring (patch progress)
+      if (!L.fixed) {
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = 'rgba(255,240,120,.90)';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r*0.62, -Math.PI/2, -Math.PI/2 + Math.PI*2*Math.min(1,L.progress));
+        ctx.stroke();
+      } else {
+        // patched: solid cap
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = 'rgba(255,240,120,.88)';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r*0.58, 0, Math.PI*2);
+        ctx.fill();
+      }
+
+      ctx.restore();
+
+      // underwater indicator ping at waterline if leak is below it (so you still "see" it)
+      if (!L.fixed && underwater) {
+        const ping = shipToScreen(L.nx, waterNY);
+        ctx.save();
+        ctx.globalAlpha = 0.75 * fade;
+        ctx.fillStyle = 'rgba(90,210,255,.95)';
+        ctx.beginPath();
+        ctx.arc(ping.x, ping.y, r*0.35, 0, Math.PI*2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    // player
+    const P = shipToScreen(state.player.nx, state.player.ny);
+    const pr = shipRect.w * state.player.r;
 
     ctx.save();
-    ctx.globalAlpha = 0.92;
-    const g = ctx.createLinearGradient(x, y, x, y+h);
-    g.addColorStop(0, 'rgba(8,12,26,.78)');
-    g.addColorStop(1, 'rgba(6,10,22,.62)');
-    ctx.fillStyle=g;
-    ctx.strokeStyle='rgba(190,220,255,.20)';
-    ctx.lineWidth=2;
+    ctx.globalAlpha = 0.95 * fade;
+    ctx.fillStyle = 'rgba(245,250,255,.95)';
+    ctx.shadowColor = 'rgba(120,200,255,.55)';
+    ctx.shadowBlur = 16;
     ctx.beginPath();
-    ctx.roundRect(x,y,w,h,18);
+    ctx.arc(P.x, P.y, pr, 0, Math.PI*2);
     ctx.fill();
-    ctx.stroke();
-
-    ctx.globalAlpha=1;
-    ctx.fillStyle='rgba(255,255,255,.94)';
-    ctx.font='900 44px system-ui,-apple-system,Segoe UI,Roboto';
-    ctx.fillText('SHIP LOST', x+22, y+62);
-
-    ctx.font='700 16px system-ui,-apple-system,Segoe UI,Roboto';
-    ctx.fillStyle='rgba(231,238,252,.92)';
-    ctx.fillText(`Survived: ${fmtTime(timeSurvived)}   •   Best: ${best?fmtTime(best):'—'}`, x+22, y+92);
-
-    ctx.font='600 14px system-ui,-apple-system,Segoe UI,Roboto';
-    ctx.fillStyle='rgba(231,238,252,.78)';
-    ctx.fillText('Click Start / Restart to try again', x+22, y+120);
-
     ctx.restore();
   }
 
-  // ---------------- Draw ----------------
-  function draw(){
-    const t = perfNow()*0.001;
-    ctx.clearRect(0,0,W,H);
+  function drawTopOverlay() {
+    // keep overlay readable, never underwater because it's UI layer
+    // (handled by HTML)
+  }
 
-    drawSky(t);
-    drawClouds(t);
-    drawOcean(t);
+  function drawDeathOverlay() {
+    if (!state.dead) return;
+
+    // screen-space overlay (NOT ship-space) so it won't get lost underwater
+    const t = state.sinkT;
 
     ctx.save();
-    const s = shipGroup.scale;
+    ctx.globalAlpha = Math.min(1, 0.35 + t*0.65);
+    ctx.fillStyle = 'rgba(0,0,0,.35)';
+    ctx.fillRect(0,0,W,H);
 
-    // pivot near center of ship for tilt
-    const pivotX = shipGroup.x + (BASE_W*s)*0.56;
-    const pivotY = shipGroup.y + (BASE_H*s)*0.62;
+    ctx.globalAlpha = Math.min(1, 0.75 + t*0.25);
+    ctx.fillStyle = 'rgba(235,244,255,.92)';
+    ctx.font = '800 64px system-ui, -apple-system, Segoe UI, Roboto, Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('SHIP LOST', W*0.46, H*0.52);
 
-    ctx.translate(pivotX, pivotY);
-    ctx.rotate(ship.tilt);
-    ctx.translate(-pivotX, -pivotY);
+    ctx.globalAlpha = 0.85;
+    ctx.font = '600 18px system-ui, -apple-system, Segoe UI, Roboto, Arial';
+    const msg = `Survived: ${fmtTime(state.finalTimeMs)}  •  Best: ${fmtTime(state.bestMs)}`;
+    ctx.fillText(msg, W*0.46, H*0.52 + 60);
 
-    // sink
-    ctx.translate(0, ship.sink);
-
-    // ship-space
-    ctx.translate(shipGroup.x, shipGroup.y);
-    ctx.scale(s, s);
-
-    // ship PNG
-    drawShipSprite();
-
-    // gameplay overlay
-    drawGameplay(t);
-
+    ctx.globalAlpha = 0.70;
+    ctx.font = '600 16px system-ui, -apple-system, Segoe UI, Roboto, Arial';
+    ctx.fillText('Click Start / Restart to try again', W*0.46, H*0.52 + 92);
     ctx.restore();
-
-    if(paused && mode==='running'){
-      ctx.fillStyle='rgba(0,0,0,.22)';
-      ctx.fillRect(0,0,W,H);
-      ctx.fillStyle='rgba(255,255,255,.92)';
-      ctx.font='900 38px system-ui,-apple-system,Segoe UI,Roboto';
-      ctx.fillText('PAUSED', 24, 56);
-      ctx.font='600 14px system-ui,-apple-system,Segoe UI,Roboto';
-      ctx.fillStyle='rgba(231,238,252,.78)';
-      ctx.fillText('Press P to resume', 26, 78);
-    }
-
-    if(mode==='dead'){
-      drawGameOverOverlay();
-    }
   }
 
-  // ---------------- Loop ----------------
-  let last = perfNow();
-  function loop(){
-    const now=perfNow();
-    const dt=clamp((now-last)/1000,0,0.04);
-    last=now;
-    update(dt);
-    draw();
-    requestAnimationFrame(loop);
-  }
-
-  // ---------------- Boot ----------------
-  resize();
-  loop();
-
-  resetGame();
-  mode='attract';
-  draw();
+  // =============================
+  // Start initial state
+  // =============================
+  reset(false);
 
 })();
 </script>
