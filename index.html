@@ -190,7 +190,7 @@
   const perfNow=()=> (performance && performance.now) ? performance.now() : Date.now();
   const fmtTime=(s)=>{ s=Math.max(0,Math.floor(s)); const m=Math.floor(s/60), r=s%60; return `${m}:${String(r).padStart(2,'0')}`; };
 
-  // ---------------- Canvas (true fullscreen w/ DPR) ----------------
+  // ---------------- Canvas ----------------
   const c=document.getElementById('c');
   const ctx=c.getContext('2d');
 
@@ -291,42 +291,80 @@
   function saveLeaderboard(){ localStorage.setItem(LS_LB, JSON.stringify(top5.slice(0,5))); }
   renderLeaderboard();
 
-  // ---------------- Ship asset (ship.png) ----------------
+  // ---------------- Ship asset ----------------
   const shipImg = new Image();
-  shipImg.src = 'ship.png';               // <- must exist in repo root
+  shipImg.src = 'ship.png';
   shipImg.decoding = 'async';
   shipImg.loading = 'eager';
   let shipReady = false;
   shipImg.onload = () => { shipReady = true; };
   shipImg.onerror = () => { shipReady = false; };
 
-  // Where inside the BASE frame the ship.png should be drawn (tweakable)
-  // (These values assume a wide hull-only PNG and keep it big on screen.)
-  const SHIP_BOX = { x: 40, y: 24, w: 1120, h: 470 };
+  // ===============================
+  // IMPORTANT ALIGNMENT CONSTANTS
+  // ===============================
+  // Base coordinate system the ship + gameplay live in.
+  // We now scale this up more aggressively to make the ship much bigger.
+  const BASE_W = 1280;
+  const BASE_H = 620;
 
-  // ---------------- Layout & Ship transform ----------------
-  const BASE_W = 1200;
-  const BASE_H = 520;
+  // Where to draw ship.png inside BASE (big).
+  // (Centered and large; tweak only if needed.)
+  const SHIP_BOX = { x: 70, y: 85, w: 1120, h: 380 };
 
+  // Leak spawn region: ONLY the lower hull band (black/red area).
+  // This keeps leaks visible and on the ship.
+  const leakSpawnBox = { x: 240, y: 320, w: 760, h: 140 };
+
+  // Player movement bounds (also sits on hull band).
+  const playRect = { x: 240, y: 310, w: 760, h: 170 };
+
+  // Build a Path2D hull mask (used for clipping + spawn checks).
+  function buildHullMaskPath(){
+    // A generous hull silhouette that covers the lower ship body area.
+    // This is NOT a perfect pixel mask; it’s a gameplay mask.
+    const p = new Path2D();
+
+    // approximate hull curve (in BASE coords)
+    const x = 170, y = 230, w = 980, h = 260;
+    const bow = x + w*0.10;
+    const stern = x + w*0.97;
+    const deck = y + h*0.26;
+    const keel = y + h*0.92;
+
+    p.moveTo(bow, keel);
+    p.quadraticCurveTo(x + w*0.03, y + h*0.72, x + w*0.06, y + h*0.56);
+    p.quadraticCurveTo(x + w*0.13, y + h*0.34, x + w*0.22, deck);
+
+    p.lineTo(x + w*0.86, deck - h*0.02);
+    p.quadraticCurveTo(x + w*0.95, deck, stern, y + h*0.48);
+    p.quadraticCurveTo(x + w*0.99, y + h*0.70, x + w*0.92, keel);
+
+    p.closePath();
+    return p;
+  }
+  let hullMaskPath = buildHullMaskPath();
+
+  // ---------------- Layout ----------------
   let shipGroup = { x: 40, y: 80, scale: 1 };
 
-  // Gameplay region inside hull (ship-space)
-  const playRect = { x: 245, y: 255, w: 710, h: 205 };
-
   function rebuildLayout(){
-    const pad = Math.max(16, Math.min(44, W*0.03));
+    const pad = Math.max(12, Math.min(34, W*0.02));
     const hudReserve = (W < 980) ? 0 : 400;
-    const availW = Math.max(680, W - hudReserve - pad*2);
-    const availH = Math.max(520, H - pad*2);
 
-    const targetW = Math.min(availW, W * 0.80);
-    const targetH = Math.min(availH, H * 0.80);
+    // Use almost the whole screen left of HUD
+    const availW = Math.max(560, W - hudReserve - pad*2);
+    const availH = Math.max(480, H - pad*2);
+
+    // Make ship BIG: try to fill width and most of height.
+    const targetW = availW * 0.98;
+    const targetH = availH * 0.92;
 
     const s = Math.min(targetW / BASE_W, targetH / BASE_H);
 
     shipGroup.scale = s;
-    shipGroup.x = pad + 10;
-    shipGroup.y = Math.max(pad, (H - BASE_H*s)/2 - 8);
+    shipGroup.x = pad + 6;
+    shipGroup.y = Math.max(pad, (H - BASE_H*s)/2 - 6);
   }
 
   // ---------------- Game State ----------------
@@ -341,16 +379,28 @@
   let timeSurvived=0, water=0, hull=1;
   let leaks=[], spawnTimer=0;
 
-  // death sequence
   let deadTimer = 0;
   let deathFinalized = false;
 
+  // ---------------- Spawn logic (INSIDE HULL ONLY) ----------------
+  function pointInHull(x,y){
+    // quick check inside the hull mask path
+    return ctx.isPointInPath(hullMaskPath, x, y);
+  }
+
   function spawnLeak(){
-    const margin=22;
-    const x=rand(playRect.x+margin, playRect.x+playRect.w-margin);
-    const y=rand(playRect.y+margin, playRect.y+playRect.h-margin);
-    const rate=rand(0.007,0.017)*(1+timeSurvived/85);
-    leaks.push({x,y,rate,patched:false, patchProg:0});
+    // Rejection sample within leakSpawnBox and inside hull mask.
+    for(let i=0;i<60;i++){
+      const x=rand(leakSpawnBox.x, leakSpawnBox.x+leakSpawnBox.w);
+      const y=rand(leakSpawnBox.y, leakSpawnBox.y+leakSpawnBox.h);
+      if(!pointInHull(x,y)) continue;
+
+      const rate=rand(0.007,0.017)*(1+timeSurvived/85);
+      leaks.push({x,y,rate,patched:false, patchProg:0});
+      return;
+    }
+    // fallback: if mask sampling fails, spawn center-lower hull
+    leaks.push({x: playRect.x + playRect.w*0.5, y: playRect.y + playRect.h*0.6, rate:0.012, patched:false, patchProg:0});
   }
 
   function resetGame(){
@@ -460,9 +510,9 @@
 
   // ---------------- Update ----------------
   function update(dt){
-    // straighter “baseline”: near-zero tilt at start, tilt grows with flooding + damage
-    shipTarget.tilt = (water - 0.12) * 0.06 + (1 - hull) * 0.20;
-    shipTarget.sink = water*58 + (1-hull)*46;
+    // Keep ship mostly straight; only mild tilt with damage/flood.
+    shipTarget.tilt = (water - 0.10) * 0.03 + (1 - hull) * 0.10;
+    shipTarget.sink = water*70 + (1-hull)*55;
 
     if(mode==='running' && !paused){
       timeSurvived += dt;
@@ -479,12 +529,14 @@
       let inflow=0;
       for(const L of leaks){
         if(L.patched) continue;
+        // If leak is below current waterline, it floods faster.
         const submerged = L.y > waterTop ? 1.35 : 0.8;
         inflow += L.rate * submerged;
         hull  -= dt * 0.0012 * submerged;
       }
       water += inflow * dt;
 
+      // passive drain
       water -= dt * 0.001 * (0.6 + hull);
 
       let ix=0, iy=0;
@@ -530,7 +582,7 @@
       const doPump = keys.has('space') || (demoMode && water>0.34);
       if(doPump){
         player.pumping += dt;
-        const eff = 0.038 * (0.55 + hull);
+        const eff = 0.040 * (0.55 + hull);
         water=clamp(water-eff*dt,0,1);
         hull =clamp(hull-dt*0.0022,0,1);
         if(Math.random()<0.12) beep(220,0.02,0.02);
@@ -542,7 +594,7 @@
       water=clamp(water,0,1);
       hull =clamp(hull,0,1);
 
-      if(water>0.88 || hull<=0){
+      if(water>0.90 || hull<=0){
         mode='dead';
         deadTimer=0;
         finalizeDeathOnce();
@@ -550,16 +602,13 @@
 
     } else if(mode==='dead'){
       deadTimer += dt;
-
-      // cinematic sink
       water = clamp(water + dt*0.12, 0, 1);
       hull  = clamp(hull  - dt*0.08, 0, 1);
     }
 
-    // ship animation continues in all modes
     const deathBoost = (mode==='dead') ? clamp(deadTimer/2.2, 0, 1) : 0;
-    const targetTilt = shipTarget.tilt + deathBoost*0.28;
-    const targetSink = shipTarget.sink + deathBoost*190;
+    const targetTilt = shipTarget.tilt + deathBoost*0.18;
+    const targetSink = shipTarget.sink + deathBoost*240;
 
     ship.tilt = lerp(ship.tilt, targetTilt, (mode==='dead') ? 0.035 : 0.06);
     ship.sink = lerp(ship.sink, targetSink, (mode==='dead') ? 0.025 : 0.05);
@@ -655,36 +704,9 @@
     ctx.globalAlpha=1;
   }
 
-  // Hull silhouette path (used ONLY for clipping gameplay + leak effects)
-  // If your ship.png hull shape differs, we can tweak this later to match it tighter.
-  function hullPath(){
-    const x=38, y=86, w=1124, h=372;
-    const bowX = x + w*0.07;
-    const sternX = x + w*0.97;
-    const deckY = y + h*0.23;
-    const keelY = y + h*0.86;
-
-    ctx.beginPath();
-    ctx.moveTo(bowX, keelY);
-    ctx.quadraticCurveTo(x + w*0.01, y + h*0.72, x + w*0.04, y + h*0.58);
-    ctx.quadraticCurveTo(x + w*0.10, y + h*0.36, x + w*0.19, deckY);
-    ctx.lineTo(x + w*0.84, deckY - h*0.02);
-    ctx.quadraticCurveTo(x + w*0.95, deckY, sternX, y + h*0.46);
-    ctx.quadraticCurveTo(x + w*0.99, y + h*0.66, x + w*0.92, keelY);
-    ctx.lineTo(bowX, keelY);
-    ctx.closePath();
-  }
-
   function drawShipSprite(){
     if(!shipReady){
-      // fallback silhouette while loading
-      hullPath();
-      ctx.fillStyle='rgba(0,0,0,.35)';
-      ctx.fill();
-      ctx.strokeStyle='rgba(200,230,255,.18)';
-      ctx.lineWidth=3;
-      ctx.stroke();
-
+      // fallback while loading
       ctx.globalAlpha=0.75;
       ctx.fillStyle='rgba(231,238,252,.65)';
       ctx.font='700 14px system-ui,-apple-system,Segoe UI,Roboto';
@@ -707,24 +729,21 @@
     ctx.drawImage(shipImg, dx, dy, dw, dh);
   }
 
-  // ---------------- Gameplay drawing (clipped) ----------------
+  // ---------------- Gameplay drawing (clipped to HULL MASK) ----------------
   function drawGameplay(t){
     ctx.save();
-    hullPath();
-    ctx.clip();
+    ctx.clip(hullMaskPath);
 
     // subtle interior tint so gameplay reads “inside the ship”
-    ctx.globalAlpha=0.22;
+    ctx.globalAlpha=0.16;
     rr(playRect.x-10, playRect.y-10, playRect.w+20, playRect.h+20, 22, 'rgba(120,170,255,.07)', 'rgba(210,235,255,.14)', 2);
     ctx.globalAlpha=1;
 
     const waterTop = playRect.y + playRect.h*(1-water);
 
-    // 1) holes (round)
+    // holes (round)
     for(const L of leaks){
       if(L.patched) continue;
-
-      const under = L.y > waterTop;
 
       // dark hole
       ctx.fillStyle='rgba(0,0,0,.62)';
@@ -733,20 +752,20 @@
       ctx.fill();
 
       // rim
-      ctx.strokeStyle = under ? 'rgba(160,235,255,.55)' : 'rgba(255,120,160,.65)';
+      ctx.strokeStyle = 'rgba(255,120,160,.65)';
       ctx.lineWidth=2.2;
       ctx.beginPath();
       ctx.arc(L.x, L.y, 9.8, 0, Math.PI*2);
       ctx.stroke();
     }
 
-    // 2) water fill
+    // water fill (within playRect)
     ctx.fillStyle='rgba(30,120,255,.38)';
     ctx.beginPath();
     ctx.roundRect(playRect.x, waterTop, playRect.w, (playRect.y+playRect.h)-waterTop, 18);
     ctx.fill();
 
-    // 3) leak locator halos above water
+    // leak locator halos
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     for(const L of leaks){
@@ -780,7 +799,7 @@
     }
     ctx.restore();
 
-    // 4) player
+    // player
     ctx.fillStyle='rgba(0,0,0,.28)';
     ctx.beginPath();
     ctx.ellipse(player.x, player.y+10, 11, 5, 0, 0, Math.PI*2);
@@ -799,7 +818,7 @@
       ctx.stroke();
     }
 
-    // 5) waterline marker
+    // waterline marker
     ctx.strokeStyle='rgba(255,255,255,.22)';
     ctx.setLineDash([6,6]);
     ctx.beginPath();
@@ -811,7 +830,6 @@
     ctx.restore();
   }
 
-  // ---------------- Screen-space Game Over overlay ----------------
   function drawGameOverOverlay(){
     const s = shipGroup.scale;
     const shipX = shipGroup.x;
@@ -852,12 +870,6 @@
     ctx.fillStyle='rgba(231,238,252,.78)';
     ctx.fillText('Click Start / Restart to try again', x+22, y+120);
 
-    if(mode==='dead' && deadTimer < 2.8){
-      ctx.fillStyle='rgba(180,220,255,.55)';
-      ctx.font='600 12px system-ui,-apple-system,Segoe UI,Roboto';
-      ctx.fillText('…she’s going down…', x+22, y+145);
-    }
-
     ctx.restore();
   }
 
@@ -870,25 +882,28 @@
     drawClouds(t);
     drawOcean(t);
 
-    // Whole ship moves as ONE unit (tilt + sink)
     ctx.save();
     const s = shipGroup.scale;
-    const pivotX = shipGroup.x + (BASE_W*s)*0.54;
-    const pivotY = shipGroup.y + (BASE_H*s)*0.66;
+
+    // pivot near center of ship for tilt
+    const pivotX = shipGroup.x + (BASE_W*s)*0.56;
+    const pivotY = shipGroup.y + (BASE_H*s)*0.62;
 
     ctx.translate(pivotX, pivotY);
     ctx.rotate(ship.tilt);
     ctx.translate(-pivotX, -pivotY);
 
+    // sink
     ctx.translate(0, ship.sink);
 
+    // ship-space
     ctx.translate(shipGroup.x, shipGroup.y);
     ctx.scale(s, s);
 
-    // Ship art (ship.png)
+    // ship PNG
     drawShipSprite();
 
-    // Gameplay overlay (clipped to hull)
+    // gameplay overlay
     drawGameplay(t);
 
     ctx.restore();
