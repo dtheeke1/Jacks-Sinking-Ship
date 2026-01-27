@@ -3,349 +3,397 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>SinkShift — Ship Sinking Game</title>
+  <title>SinkShift — Ship Sinking Survival</title>
   <style>
     :root{
-      --bg:#0b1220; --panel:#0f1a33; --panel2:#0c1630; --ink:#e7eefc; --muted:#9db0d6;
-      --good:#34d399; --bad:#fb7185; --warn:#fbbf24; --line:#23335f;
+      --ink:#e7eefc;
+      --muted:#aab8dd;
+      --line:rgba(190,220,255,.18);
+      --panel:rgba(10,16,38,.62);
+      --panel2:rgba(9,14,34,.50);
+      --btn:rgba(18,30,70,.78);
+      --btnLine:rgba(90,140,255,.30);
     }
-    html,body{height:100%; margin:0; background:radial-gradient(1200px 600px at 50% 20%, #13224a, var(--bg)); color:var(--ink); font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial,sans-serif;}
-    .wrap{max-width:1100px; margin:0 auto; padding:16px;}
-    header{display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap;}
-    h1{font-size:20px; margin:0; letter-spacing:.5px;}
-    .sub{color:var(--muted); font-size:13px;}
-    .grid{display:grid; grid-template-columns: 1fr 320px; gap:14px; margin-top:14px;}
-    @media (max-width: 980px){ .grid{grid-template-columns:1fr; } }
-    canvas{width:100%; height:auto; background:linear-gradient(#0a1430,#071026); border:1px solid var(--line); border-radius:14px; box-shadow: 0 18px 60px rgba(0,0,0,.45);}
-    .panel{background:linear-gradient(180deg,var(--panel),var(--panel2)); border:1px solid var(--line); border-radius:14px; padding:12px; box-shadow: 0 18px 60px rgba(0,0,0,.35);}
-    .row{display:flex; gap:10px; align-items:center; justify-content:space-between; margin:8px 0;}
-    .pill{font-size:12px; padding:4px 8px; border-radius:999px; border:1px solid var(--line); color:var(--muted);}
-    .btns{display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;}
-    button{
-      appearance:none; border:1px solid var(--line); background:#101e3e; color:var(--ink);
-      padding:9px 10px; border-radius:12px; cursor:pointer; font-weight:650; letter-spacing:.2px;
+
+    html,body{height:100%; margin:0; overflow:hidden; background:#050817; color:var(--ink);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial,sans-serif;
     }
-    button:hover{filter:brightness(1.1)}
-    button:active{transform:translateY(1px)}
-    button.primary{background:#173064; border-color:#2b4aa1;}
-    button.danger{background:#3a1120; border-color:#7a2540;}
+
+    /* Fullscreen canvas */
+    canvas#c{
+      position:fixed; inset:0;
+      width:100vw; height:100vh;
+      display:block;
+      background:#050817;
+    }
+
+    /* Top-left title overlay */
+    .topbar{
+      position:fixed; left:18px; top:14px; z-index:10;
+      display:flex; flex-direction:column; gap:2px;
+      pointer-events:none;
+      text-shadow: 0 8px 28px rgba(0,0,0,.65);
+    }
+    .titleRow{display:flex; align-items:baseline; gap:10px;}
+    .title{font-weight:800; letter-spacing:.3px; font-size:22px;}
+    .pill{
+      font-size:12px; padding:4px 10px; border-radius:999px;
+      border:1px solid var(--line); color:var(--muted); background:rgba(255,255,255,.04);
+    }
+    .sub{font-size:13px; color:var(--muted);}
+
+    /* Floating HUD (right) */
+    .hud{
+      position:fixed; right:16px; top:14px; z-index:20;
+      width:340px; max-width: calc(100vw - 32px);
+      background:linear-gradient(180deg, var(--panel), var(--panel2));
+      border:1px solid var(--line);
+      border-radius:16px;
+      box-shadow: 0 20px 80px rgba(0,0,0,.55);
+      padding:12px;
+      backdrop-filter: blur(10px);
+    }
+
+    .row{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;}
     .k{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; color:#cfe0ff;}
-    .stat{display:grid; grid-template-columns: 1fr auto; gap:8px; font-size:13px; padding:8px; border-radius:12px; border:1px solid var(--line); background:rgba(255,255,255,.03);}
-    .bar{height:10px; border-radius:999px; background:rgba(255,255,255,.08); overflow:hidden; border:1px solid rgba(255,255,255,.08);}
-    .bar > div{height:100%;}
-    .hint{font-size:12px; color:var(--muted); line-height:1.35; margin-top:10px;}
-    .divider{height:1px; background:var(--line); margin:12px 0;}
-    .mini{font-size:12px; color:var(--muted);}
+    .hintPill{
+      font-size:12px; padding:4px 8px; border-radius:999px;
+      border:1px solid var(--line); color:var(--muted); background:rgba(255,255,255,.03);
+      white-space:nowrap;
+    }
+
+    .stat{
+      display:grid; grid-template-columns: 1fr auto; gap:8px;
+      font-size:13px; padding:9px;
+      border-radius:14px;
+      border:1px solid rgba(190,220,255,.14);
+      background:rgba(255,255,255,.03);
+      margin-bottom:10px;
+    }
+    .mini{font-size:12px; color:var(--muted); grid-column:1/3; line-height:1.25;}
+    .bar{height:10px; border-radius:999px; background:rgba(255,255,255,.08); overflow:hidden; border:1px solid rgba(255,255,255,.08); grid-column:1/3;}
+    .bar > div{height:100%; width:0%;}
+
+    .btns{display:flex; gap:8px; flex-wrap:wrap; margin-top:6px;}
+    button{
+      appearance:none; border:1px solid var(--btnLine); background:var(--btn); color:var(--ink);
+      padding:9px 10px; border-radius:12px;
+      cursor:pointer; font-weight:750; letter-spacing:.2px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+    button:hover{filter:brightness(1.12)}
+    button:active{transform:translateY(1px)}
+    button.primary{background:rgba(26,56,120,.78); border-color:rgba(120,170,255,.45);}
+    button.danger{background:rgba(70,18,34,.72); border-color:rgba(255,120,160,.40);}
+
+    .help{
+      margin-top:10px; font-size:12px; color:var(--muted); line-height:1.35;
+    }
+
+    /* Mobile: HUD becomes bottom sheet */
+    @media (max-width: 900px){
+      .hud{
+        left:14px; right:14px; top:auto; bottom:14px; width:auto;
+      }
+      .topbar{left:14px; top:10px;}
+    }
   </style>
 </head>
+
 <body>
-  <div class="wrap">
-    <header>
-      <div>
-        <h1>SinkShift <span class="pill">ship sinking survival</span></h1>
-        <div class="sub">Patch leaks • Run pumps • Keep the waterline below the deck</div>
-      </div>
-      <div class="pill">Controls: <span class="k">WASD / Arrows</span> • <span class="k">E</span>=Patch • <span class="k">Space</span>=Pump • <span class="k">P</span>=Pause</div>
-    </header>
+  <canvas id="c"></canvas>
 
-    <div class="grid">
-      <div>
-        <canvas id="c" width="900" height="520"></canvas>
-      </div>
-      <aside class="panel">
-        <div class="row">
-          <div class="pill">Run time: <span class="k" id="t">0:00</span></div>
-          <div class="pill">Best: <span class="k" id="best">—</span></div>
-        </div>
-
-        <div class="stat">
-          <div>Waterline</div>
-          <div id="waterPct" class="k">0%</div>
-          <div class="bar" style="grid-column:1/3">
-            <div id="waterBar" style="width:0%"></div>
-          </div>
-        </div>
-
-        <div class="stat" style="margin-top:10px">
-          <div>Leaks</div>
-          <div id="leaks" class="k">0</div>
-          <div class="mini" style="grid-column:1/3">More leaks spawn over time. Patch them fast.</div>
-        </div>
-
-        <div class="stat" style="margin-top:10px">
-          <div>Hull integrity</div>
-          <div id="hull" class="k">100%</div>
-          <div class="bar" style="grid-column:1/3">
-            <div id="hullBar" style="width:100%"></div>
-          </div>
-        </div>
-
-        <div class="divider"></div>
-
-        <div class="btns">
-          <button class="primary" id="startBtn">Start / Restart</button>
-          <button id="demoBtn">Demo Autoplay</button>
-          <button id="muteBtn">Sound: On</button>
-          <button class="danger" id="panicBtn">Panic Pump</button>
-        </div>
-
-        <div class="hint">
-          <b>Goal:</b> survive as long as possible.<br/>
-          <b>Patch (E):</b> stand over a leak to seal it (takes a moment).<br/>
-          <b>Pump (Space):</b> drains water but strains the hull if overused.<br/>
-          <b>Panic Pump:</b> big drain + big hull damage. Use as a last resort.<br/><br/>
-          Tip: prioritize leaks below the current waterline — they flood faster.
-        </div>
-      </aside>
+  <div class="topbar">
+    <div class="titleRow">
+      <div class="title">SinkShift</div>
+      <div class="pill">ship sinking survival</div>
+      <div class="pill">WASD/Arrows • E Patch • Space Pump • P Pause</div>
     </div>
+    <div class="sub">Patch leaks • Run pumps • Keep the waterline below the deck</div>
   </div>
+
+  <aside class="hud">
+    <div class="row">
+      <div class="hintPill">Run: <span class="k" id="t">0:00</span></div>
+      <div class="hintPill">Best: <span class="k" id="best">—</span></div>
+    </div>
+
+    <div class="stat">
+      <div>Waterline</div>
+      <div id="waterPct" class="k">0%</div>
+      <div class="bar"><div id="waterBar"></div></div>
+    </div>
+
+    <div class="stat">
+      <div>Leaks</div>
+      <div id="leaks" class="k">0</div>
+      <div class="mini">More leaks spawn over time. Patch them fast.</div>
+    </div>
+
+    <div class="stat">
+      <div>Hull integrity</div>
+      <div id="hull" class="k">100%</div>
+      <div class="bar"><div id="hullBar"></div></div>
+    </div>
+
+    <div class="btns">
+      <button class="primary" id="startBtn">Start / Restart</button>
+      <button id="demoBtn">Demo Autoplay</button>
+      <button id="muteBtn">Sound: On</button>
+      <button class="danger" id="panicBtn">Panic Pump</button>
+    </div>
+
+    <div class="help">
+      Patch (E): stand over leak to seal it.<br/>
+      Pump (Space): drains water but strains hull.<br/>
+      Panic Pump: big drain + big damage.
+    </div>
+  </aside>
 
 <script>
 (() => {
-  // ---------- Utilities ----------
-  const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
-  const lerp  = (a,b,t)=>a+(b-a)*t;
-  const fmtTime = (s)=>{
-    s=Math.max(0,Math.floor(s));
-    const m=Math.floor(s/60), r=s%60;
-    return `${m}:${String(r).padStart(2,'0')}`;
-  };
-  const rand = (a,b)=>a+Math.random()*(b-a);
-  const perfNow = ()=> (performance && performance.now) ? performance.now() : Date.now();
+  // ---------------- Utils ----------------
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const lerp=(a,b,t)=>a+(b-a)*t;
+  const rand=(a,b)=>a+Math.random()*(b-a);
+  const perfNow=()=> (performance && performance.now) ? performance.now() : Date.now();
+  const fmtTime=(s)=>{ s=Math.max(0,Math.floor(s)); const m=Math.floor(s/60), r=s%60; return `${m}:${String(r).padStart(2,'0')}`; };
 
-  // ---------- Canvas ----------
-  const c = document.getElementById('c');
-  const ctx = c.getContext('2d');
+  // ---------------- Canvas (true fullscreen w/ DPR) ----------------
+  const c=document.getElementById('c');
+  const ctx=c.getContext('2d');
 
-  // roundRect polyfill (avoids crashes)
   if (!ctx.roundRect) {
-    ctx.roundRect = function(x, y, w, h, r) {
-      r = Math.min(r, w/2, h/2);
+    ctx.roundRect=function(x,y,w,h,r){
+      r=Math.min(r,w/2,h/2);
       this.beginPath();
-      this.moveTo(x + r, y);
-      this.arcTo(x + w, y, x + w, y + h, r);
-      this.arcTo(x + w, y + h, x, y + h, r);
-      this.arcTo(x, y + h, x, y, r);
-      this.arcTo(x, y, x + w, y, r);
+      this.moveTo(x+r,y);
+      this.arcTo(x+w,y,x+w,y+h,r);
+      this.arcTo(x+w,y+h,x,y+h,r);
+      this.arcTo(x,y+h,x,y,r);
+      this.arcTo(x,y,x+w,y,r);
       this.closePath();
       return this;
     };
   }
 
-  // ---------- UI ----------
-  const elT = document.getElementById('t');
-  const elBest = document.getElementById('best');
-  const elLeaks = document.getElementById('leaks');
-  const elWaterPct = document.getElementById('waterPct');
-  const elWaterBar = document.getElementById('waterBar');
-  const elHull = document.getElementById('hull');
-  const elHullBar = document.getElementById('hullBar');
+  let W=0,H=0,DPR=1;
+  function resize(){
+    DPR = Math.min(2, window.devicePixelRatio || 1);
+    const cssW = window.innerWidth;
+    const cssH = window.innerHeight;
+    c.style.width = cssW+'px';
+    c.style.height= cssH+'px';
+    c.width  = Math.floor(cssW*DPR);
+    c.height = Math.floor(cssH*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    W = cssW;
+    H = cssH;
+    rebuildLayout();
+  }
+  window.addEventListener('resize', resize);
 
-  const startBtn = document.getElementById('startBtn');
-  const demoBtn  = document.getElementById('demoBtn');
-  const muteBtn  = document.getElementById('muteBtn');
-  const panicBtn = document.getElementById('panicBtn');
+  // ---------------- UI ----------------
+  const elT=document.getElementById('t');
+  const elBest=document.getElementById('best');
+  const elLeaks=document.getElementById('leaks');
+  const elWaterPct=document.getElementById('waterPct');
+  const elWaterBar=document.getElementById('waterBar');
+  const elHull=document.getElementById('hull');
+  const elHullBar=document.getElementById('hullBar');
 
-  const LS_BEST = 'sinkshift_best_seconds';
-  let best = Number(localStorage.getItem(LS_BEST) || 0);
+  const startBtn=document.getElementById('startBtn');
+  const demoBtn=document.getElementById('demoBtn');
+  const muteBtn=document.getElementById('muteBtn');
+  const panicBtn=document.getElementById('panicBtn');
+
+  const LS_BEST='sinkshift_best_seconds';
+  let best=Number(localStorage.getItem(LS_BEST)||0);
   elBest.textContent = best ? fmtTime(best) : '—';
 
-  // ---------- Sound ----------
-  let audioCtx = null;
-  let soundOn = true;
-  function beep(freq=440, dur=0.05, vol=0.04){
+  // ---------------- Sound ----------------
+  let audioCtx=null;
+  let soundOn=true;
+  function beep(freq=440,dur=0.05,vol=0.04){
     if(!soundOn) return;
-    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-    const o = audioCtx.createOscillator();
-    const g = audioCtx.createGain();
-    o.type = 'sine';
-    o.frequency.value = freq;
-    g.gain.value = vol;
+    audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)();
+    const o=audioCtx.createOscillator();
+    const g=audioCtx.createGain();
+    o.type='sine'; o.frequency.value=freq; g.gain.value=vol;
     o.connect(g); g.connect(audioCtx.destination);
-    o.start();
-    o.stop(audioCtx.currentTime + dur);
+    o.start(); o.stop(audioCtx.currentTime+dur);
   }
 
-  // ---------- Game State ----------
-  const W = c.width, H = c.height;
+  // ---------------- Layout rectangles (rebuilt on resize) ----------------
+  let shipFrame=null, interior=null;
 
-  // logical gameplay ship rect (unchanged)
-  const ship = { x: 120, y: 80, w: 640, h: 360, deckY: 110, tilt: 0 };
+  // Gameplay ship logical rect (we map it into interior)
+  const ship = { x: 0, y: 0, w: 640, h: 360, deckY: 110, tilt: 0 };
 
-  const player = { x: ship.x + ship.w*0.55, y: ship.y + ship.h*0.55, r: 10, speed: 220, patching: 0, pumping: 0 };
+  function rebuildLayout(){
+    // Big cinematic ship on left ~ 70% of width, HUD overlays on right but canvas is full.
+    const pad = Math.max(18, Math.min(40, W*0.03));
+    const hudApproxW = (W < 900) ? 0 : 360; // HUD floats, but leave visual room on desktop
+    const playW = W - hudApproxW - pad*2;
+    const playH = H - pad*2;
 
-  let running = false;
-  let paused  = false;
-  let demoMode = false;
+    // Ship frame occupies a big portion, centered vertically
+    const frameW = Math.max(740, Math.min(playW, W*0.68));
+    const frameH = Math.max(420, Math.min(playH, H*0.72));
 
-  let timeSurvived = 0;
-  let water = 0; // 0..1
-  let hull  = 1; // 0..1
-  let leaks = [];
-  let spawnTimer = 0;
+    const fx = pad;
+    const fy = Math.max(pad, (H - frameH)/2 - 10);
+
+    shipFrame = { x: fx, y: fy, w: frameW, h: frameH };
+
+    // Interior window sits INSIDE hull (lower portion)
+    interior = {
+      x: shipFrame.x + shipFrame.w*0.18,
+      y: shipFrame.y + shipFrame.h*0.40,
+      w: shipFrame.w*0.64,
+      h: shipFrame.h*0.40
+    };
+
+    // Logical ship rect stays the same size; just set origin so physics are stable
+    ship.x = 120; ship.y = 80; ship.w = 640; ship.h = 360; ship.deckY = 110;
+  }
+
+  // ---------------- Game State ----------------
+  const player = { x: 0, y: 0, r: 10, speed: 220, patching: 0, pumping: 0 };
+  let running=false, paused=false, demoMode=false;
+  let timeSurvived=0, water=0, hull=1;
+  let leaks=[], spawnTimer=0;
 
   function spawnLeak(){
-    const margin = 40;
-    const x = rand(ship.x+margin, ship.x+ship.w-margin);
-    const y = rand(ship.y+ship.deckY+40, ship.y+ship.h-margin);
-    const rate = rand(0.006, 0.016) * (1 + timeSurvived/90);
+    const margin=40;
+    const x=rand(ship.x+margin, ship.x+ship.w-margin);
+    const y=rand(ship.y+ship.deckY+40, ship.y+ship.h-margin);
+    const rate=rand(0.006,0.016)*(1+timeSurvived/90);
     leaks.push({x,y,rate,patched:false});
   }
 
   function resetGame(){
-    timeSurvived = 0;
-    water = 0.08;
-    hull = 1;
-    leaks = [];
-    spawnTimer = 0;
+    timeSurvived=0;
+    water=0.08;
+    hull=1;
+    leaks=[];
+    spawnTimer=0;
     player.x = ship.x + ship.w*0.55;
     player.y = ship.y + ship.h*0.55;
-    player.patching = 0;
-    player.pumping = 0;
-    running = true;
-    paused = false;
+    player.patching=0;
+    player.pumping=0;
+    running=true; paused=false;
     for(let i=0;i<2;i++) spawnLeak();
     beep(520,0.06,0.05);
   }
 
-  // ---------- Input ----------
-  const keys = new Set();
-  window.addEventListener('keydown', (e)=>{
-    const k = e.key.toLowerCase();
-    if(['arrowup','arrowdown','arrowleft','arrowright',' ','w','a','s','d','e','p'].includes(k) || e.key === ' ') {
-      if(e.key === ' ') e.preventDefault();
-    }
-    keys.add(k === ' ' ? 'space' : k);
-    if(k === 'p'){
-      paused = !paused;
-      beep(paused?260:460,0.06,0.05);
-    }
+  // ---------------- Input ----------------
+  const keys=new Set();
+  window.addEventListener('keydown',(e)=>{
+    const k=e.key.toLowerCase();
+    if(e.key===' ') e.preventDefault();
+    keys.add(k===' ' ? 'space' : k);
+    if(k==='p'){ paused=!paused; beep(paused?260:460,0.06,0.05); }
   });
-  window.addEventListener('keyup', (e)=>{
-    const k = e.key.toLowerCase();
-    keys.delete(k === ' ' ? 'space' : k);
+  window.addEventListener('keyup',(e)=>{
+    const k=e.key.toLowerCase();
+    keys.delete(k===' ' ? 'space' : k);
   });
 
-  // touch stick
-  let touchStick = null;
-  c.addEventListener('touchstart', (e)=>{
-    e.preventDefault();
-    const t = e.changedTouches[0];
-    const rect = c.getBoundingClientRect();
-    touchStick = {sx: (t.clientX-rect.left)*(W/rect.width), sy:(t.clientY-rect.top)*(H/rect.height), dx:0, dy:0};
-  }, {passive:false});
-  c.addEventListener('touchmove', (e)=>{
-    e.preventDefault();
-    if(!touchStick) return;
-    const t = e.changedTouches[0];
-    const rect = c.getBoundingClientRect();
-    const x = (t.clientX-rect.left)*(W/rect.width);
-    const y = (t.clientY-rect.top)*(H/rect.height);
-    touchStick.dx = clamp(x - touchStick.sx, -80, 80);
-    touchStick.dy = clamp(y - touchStick.sy, -80, 80);
-  }, {passive:false});
-  c.addEventListener('touchend', (e)=>{ e.preventDefault(); touchStick=null; }, {passive:false});
-
-  // ---------- Buttons ----------
-  startBtn.addEventListener('click', ()=>{ demoMode=false; resetGame(); });
-  demoBtn.addEventListener('click',  ()=>{ demoMode=true;  resetGame(); });
-  muteBtn.addEventListener('click', ()=>{
-    soundOn = !soundOn;
-    muteBtn.textContent = `Sound: ${soundOn ? 'On' : 'Off'}`;
+  // ---------------- Buttons ----------------
+  startBtn.addEventListener('click',()=>{ demoMode=false; resetGame(); });
+  demoBtn.addEventListener('click', ()=>{ demoMode=true;  resetGame(); });
+  muteBtn.addEventListener('click',()=>{
+    soundOn=!soundOn;
+    muteBtn.textContent=`Sound: ${soundOn?'On':'Off'}`;
     if(soundOn) beep(600,0.05,0.05);
   });
-  panicBtn.addEventListener('click', ()=>{
-    if(!running || paused) return;
-    water = clamp(water - 0.12, 0, 1);
-    hull  = clamp(hull  - 0.10, 0, 1);
-    player.pumping = Math.max(player.pumping, 0.35);
+  panicBtn.addEventListener('click',()=>{
+    if(!running||paused) return;
+    water=clamp(water-0.14,0,1);
+    hull =clamp(hull-0.12,0,1);
+    player.pumping=Math.max(player.pumping,0.35);
     beep(140,0.10,0.06);
   });
 
-  // ---------- Game Logic ----------
   function nearestLeak(){
     let bestL=null, bd=1e9;
     for(const L of leaks){
       if(L.patched) continue;
-      const d = Math.hypot(player.x-L.x, player.y-L.y);
+      const d=Math.hypot(player.x-L.x, player.y-L.y);
       if(d<bd){ bd=d; bestL=L; }
     }
     return {leak:bestL, dist:bd};
   }
 
   function update(dt){
-    if(!running || paused) return;
-
+    if(!running||paused) return;
     timeSurvived += dt;
 
-    // spawn leaks over time
+    // leak spawning
     const targetInterval = clamp(6 - timeSurvived/40, 1.8, 6);
     spawnTimer += dt;
-    if(spawnTimer > targetInterval){
-      spawnTimer = 0;
-      if(leaks.filter(l=>!l.patched).length < 8) spawnLeak();
+    if(spawnTimer>targetInterval){
+      spawnTimer=0;
+      if(leaks.filter(l=>!l.patched).length<9) spawnLeak();
     }
 
-    // water inflow
     const waterlineY = ship.y + ship.deckY + ship.h*(1-water)*0.92;
-    let inflow = 0;
+    let inflow=0;
     for(const L of leaks){
       if(L.patched) continue;
       const submerged = L.y > waterlineY ? 1.35 : 0.8;
       inflow += L.rate * submerged;
-      hull -= dt * 0.0012 * submerged;
+      hull  -= dt * 0.0012 * submerged;
     }
     water += inflow * dt;
 
-    // tiny passive drain
+    // passive drain
     water -= dt * 0.001 * (0.6 + hull);
 
-    // inputs
-    const pumpHeld  = keys.has('space');
-    const patchHeld = keys.has('e');
+    // controls + demo
+    const pumpHeld = keys.has('space');
+    const patchHeld= keys.has('e');
 
-    // demo autopilot
     let ax=0, ay=0, wantPatch=false, wantPump=false;
     if(demoMode){
-      const {leak, dist} = nearestLeak();
+      const {leak, dist}=nearestLeak();
       if(leak){
-        const dx = leak.x - player.x, dy = leak.y - player.y;
-        const mag = Math.hypot(dx,dy) || 1;
-        ax = dx/mag; ay = dy/mag;
-        if(dist < 18) wantPatch=true;
+        const dx=leak.x-player.x, dy=leak.y-player.y;
+        const mag=Math.hypot(dx,dy)||1;
+        ax=dx/mag; ay=dy/mag;
+        if(dist<18) wantPatch=true;
       }
-      if(water > 0.34) wantPump=true;
+      if(water>0.34) wantPump=true;
     }
 
     // movement
     let ix=0, iy=0;
-    if(keys.has('arrowleft')||keys.has('a')) ix -= 1;
-    if(keys.has('arrowright')||keys.has('d')) ix += 1;
-    if(keys.has('arrowup')||keys.has('w')) iy -= 1;
-    if(keys.has('arrowdown')||keys.has('s')) iy += 1;
-    if(touchStick){ ix = touchStick.dx/80; iy = touchStick.dy/80; }
-    if(demoMode){ ix = ax; iy = ay; }
-
-    const mm = Math.hypot(ix,iy);
+    if(keys.has('arrowleft')||keys.has('a')) ix-=1;
+    if(keys.has('arrowright')||keys.has('d')) ix+=1;
+    if(keys.has('arrowup')||keys.has('w')) iy-=1;
+    if(keys.has('arrowdown')||keys.has('s')) iy+=1;
+    if(demoMode){ ix=ax; iy=ay; }
+    const mm=Math.hypot(ix,iy);
     if(mm>1){ ix/=mm; iy/=mm; }
     player.x += ix * player.speed * dt;
     player.y += iy * player.speed * dt;
 
-    // clamp inside ship interior
-    const left = ship.x + 28, right = ship.x + ship.w - 28;
-    const top  = ship.y + ship.deckY + 18, bottom = ship.y + ship.h - 18;
-    player.x = clamp(player.x, left, right);
-    player.y = clamp(player.y, top, bottom);
+    // clamp
+    const left=ship.x+28, right=ship.x+ship.w-28;
+    const top=ship.y+ship.deckY+18, bottom=ship.y+ship.h-18;
+    player.x=clamp(player.x,left,right);
+    player.y=clamp(player.y,top,bottom);
 
     // patch
-    const {leak, dist} = nearestLeak();
+    const {leak, dist}=nearestLeak();
     const doPatch = demoMode ? wantPatch : patchHeld;
-    if(doPatch && leak && dist < 22){
+    if(doPatch && leak && dist<22){
       player.patching += dt;
-      if(player.patching > 0.65){
-        leak.patched = true;
-        player.patching = 0;
-        water = clamp(water - 0.02, 0, 1);
+      if(player.patching>0.65){
+        leak.patched=true;
+        player.patching=0;
+        water=clamp(water-0.02,0,1);
         beep(820,0.05,0.05);
       }
     } else {
@@ -357,271 +405,266 @@
     if(doPump){
       player.pumping += dt;
       const eff = 0.035 * (0.55 + hull);
-      water = clamp(water - eff*dt, 0, 1);
-      hull  = clamp(hull  - dt*0.0022, 0, 1);
-      if(Math.random() < 0.12) beep(220,0.02,0.02);
+      water=clamp(water-eff*dt,0,1);
+      hull =clamp(hull-dt*0.0022,0,1);
+      if(Math.random()<0.12) beep(220,0.02,0.02);
     } else {
       player.pumping = Math.max(0, player.pumping - dt*2.2);
     }
 
-    // extra stress
     hull -= dt * (0.0008 + water*0.0022);
-
-    water = clamp(water, 0, 1);
-    hull  = clamp(hull,  0, 1);
+    water=clamp(water,0,1);
+    hull =clamp(hull,0,1);
 
     ship.tilt = lerp(ship.tilt, (water-0.25)*0.08 + (0.6-hull)*0.06, 0.06);
 
-    // lose conditions
-    if(water > 0.86 || hull <= 0){
-      running = false;
+    if(water>0.86 || hull<=0){
+      running=false;
       beep(90,0.18,0.08);
-      if(timeSurvived > best){
-        best = timeSurvived;
+      if(timeSurvived>best){
+        best=timeSurvived;
         localStorage.setItem(LS_BEST, String(Math.floor(best)));
-        elBest.textContent = fmtTime(best);
+        elBest.textContent=fmtTime(best);
       }
     }
 
     // UI
-    elT.textContent = fmtTime(timeSurvived);
-    const leaksOpen = leaks.filter(l=>!l.patched).length;
-    elLeaks.textContent = String(leaksOpen);
+    elT.textContent=fmtTime(timeSurvived);
+    elLeaks.textContent=String(leaks.filter(l=>!l.patched).length);
 
-    const wPct = Math.round(water*100);
-    elWaterPct.textContent = `${wPct}%`;
-    elWaterBar.style.width = `${wPct}%`;
-    elWaterBar.style.background = water < 0.4 ? 'rgba(52,211,153,.95)' : (water < 0.7 ? 'rgba(251,191,36,.95)' : 'rgba(251,113,133,.95)');
+    const wPct=Math.round(water*100);
+    elWaterPct.textContent=`${wPct}%`;
+    elWaterBar.style.width=`${wPct}%`;
+    elWaterBar.style.background = water<0.4 ? 'rgba(52,211,153,.95)' : (water<0.7 ? 'rgba(251,191,36,.95)' : 'rgba(251,113,133,.95)');
 
-    const hPct = Math.round(hull*100);
-    elHull.textContent = `${hPct}%`;
-    elHullBar.style.width = `${hPct}%`;
-    elHullBar.style.background = hull > 0.6 ? 'rgba(52,211,153,.95)' : (hull > 0.3 ? 'rgba(251,191,36,.95)' : 'rgba(251,113,133,.95)');
+    const hPct=Math.round(hull*100);
+    elHull.textContent=`${hPct}%`;
+    elHullBar.style.width=`${hPct}%`;
+    elHullBar.style.background = hull>0.6 ? 'rgba(52,211,153,.95)' : (hull>0.3 ? 'rgba(251,191,36,.95)' : 'rgba(251,113,133,.95)');
   }
 
-  // ---------- Rendering helpers ----------
-  function roundRect(x,y,w,h,r,fill,stroke){
+  // ---------------- Rendering ----------------
+  function rr(x,y,w,h,r,fill,stroke,lw=2){
     ctx.beginPath();
     ctx.roundRect(x,y,w,h,r);
-    if(fill){ ctx.fillStyle = fill; ctx.fill(); }
-    if(stroke){ ctx.strokeStyle = stroke; ctx.lineWidth = 2; ctx.stroke(); }
+    if(fill){ ctx.fillStyle=fill; ctx.fill(); }
+    if(stroke){ ctx.strokeStyle=stroke; ctx.lineWidth=lw; ctx.stroke(); }
   }
 
-  function drawCloudBand(t){
-    const baseY = 70;
-    const layers = [
-      {y: baseY,   a:0.18, s:24, sp:10},
-      {y: baseY+35,a:0.12, s:18, sp:16},
+  function drawSky(t){
+    const g=ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,'#05091a');
+    g.addColorStop(0.55,'#071b43');
+    g.addColorStop(1,'#030612');
+    ctx.fillStyle=g;
+    ctx.fillRect(0,0,W,H);
+
+    // stars
+    ctx.globalAlpha=0.18;
+    ctx.fillStyle='#cfe0ff';
+    for(let i=0;i<140;i++){
+      const x=(i*193)%W;
+      const y=(i*97)%H;
+      const s=((i*31)%2)+1;
+      ctx.fillRect(x, y*0.52, s, s);
+    }
+    ctx.globalAlpha=1;
+  }
+
+  function drawClouds(t){
+    const baseY = 80;
+    const layers=[
+      {y:baseY,   a:0.13, sp:10, w:260, h:34},
+      {y:baseY+46,a:0.09, sp:16, w:220, h:28},
     ];
     for(const L of layers){
-      const off = (t*L.sp) % 240;
-      ctx.globalAlpha = L.a;
-      ctx.fillStyle = '#cfe0ff';
-      for(let i=-1;i<6;i++){
-        const x = i*220 - off;
-        cloudBlob(x+120, L.y, 180, L.s);
+      const off=(t*L.sp)%320;
+      ctx.globalAlpha=L.a;
+      ctx.fillStyle='#cfe0ff';
+      for(let i=-2;i<7;i++){
+        const x=i*300 - off;
+        cloud(x+180, L.y, L.w, L.h);
       }
     }
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha=1;
 
-    function cloudBlob(x,y,w,soft){
+    function cloud(cx,cy,w,h){
       ctx.beginPath();
-      ctx.ellipse(x, y, w*0.45, 18+soft*0.3, 0, 0, Math.PI*2);
-      ctx.ellipse(x-50, y+8, w*0.30, 15+soft*0.25, 0, 0, Math.PI*2);
-      ctx.ellipse(x+65, y+10, w*0.32, 14+soft*0.25, 0, 0, Math.PI*2);
+      ctx.ellipse(cx,cy,w*0.45,h,0,0,Math.PI*2);
+      ctx.ellipse(cx-w*0.20,cy+8,w*0.28,h*0.85,0,0,Math.PI*2);
+      ctx.ellipse(cx+w*0.22,cy+10,w*0.30,h*0.78,0,0,Math.PI*2);
       ctx.fill();
     }
   }
 
-  function drawOcean(t, topY){
-    const g = ctx.createLinearGradient(0, topY, 0, H);
-    g.addColorStop(0, 'rgba(30,110,220,.20)');
-    g.addColorStop(1, 'rgba(10,40,90,.55)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, topY, W, H-topY);
+  function drawOcean(t){
+    const top = H*0.62;
+    const g=ctx.createLinearGradient(0,top,0,H);
+    g.addColorStop(0,'rgba(40,120,255,.14)');
+    g.addColorStop(1,'rgba(10,35,80,.62)');
+    ctx.fillStyle=g;
+    ctx.fillRect(0,top,W,H-top);
 
-    ctx.globalAlpha = 0.55;
-    ctx.strokeStyle = 'rgba(170,220,255,.35)';
-    ctx.lineWidth = 2;
-    for(let k=0;k<4;k++){
-      const y = topY + 18 + k*22;
+    ctx.globalAlpha=0.65;
+    ctx.strokeStyle='rgba(180,230,255,.22)';
+    ctx.lineWidth=2;
+    for(let k=0;k<6;k++){
+      const y=top + 18 + k*20;
       ctx.beginPath();
-      for(let x=0;x<=W;x+=18){
-        const yy = y + Math.sin((x*0.012) + t*(1.2+k*0.25)) * (4+k*1.2);
+      for(let x=0;x<=W;x+=16){
+        const yy = y + Math.sin(x*0.012 + t*(1.3+k*0.18))* (4+k*0.9);
         if(x===0) ctx.moveTo(x,yy); else ctx.lineTo(x,yy);
       }
       ctx.stroke();
     }
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha=1;
   }
 
-  function drawTitanicFrame(t, frame){
-    const {x,y,w,h} = frame;
+  // More “real” ship look: gradients, sharp silhouette, stripe, lifeboats, porthole rows
+  function drawShipFrame(t){
+    const f=shipFrame;
+    const x=f.x, y=f.y, w=f.w, h=f.h;
 
-    // glow behind ship
-    ctx.globalAlpha = 0.30;
-    ctx.fillStyle = 'rgba(140,190,255,.22)';
-    ctx.beginPath();
-    ctx.roundRect(x-8, y-10, w+16, h+22, 26);
-    ctx.fill();
-    ctx.globalAlpha = 1;
+    // soft glow behind ship
+    ctx.globalAlpha=0.25;
+    ctx.fillStyle='rgba(120,170,255,.18)';
+    rr(x-10,y-12,w+20,h+24,26,null,null);
+    ctx.fillRect(x-10,y-12,w+20,h+24);
+    ctx.globalAlpha=1;
 
-    // hull silhouette
+    // hull silhouette (sharper + larger)
     ctx.save();
-    ctx.fillStyle = '#0b0f1d';
-    ctx.strokeStyle = 'rgba(150,190,255,.22)';
-    ctx.lineWidth = 3;
-
     ctx.beginPath();
-    ctx.moveTo(x + w*0.12, y + h*0.78);
-    ctx.quadraticCurveTo(x + w*0.07, y + h*0.73, x + w*0.08, y + h*0.64);
-    ctx.quadraticCurveTo(x + w*0.10, y + h*0.42, x + w*0.18, y + h*0.34);
-    ctx.lineTo(x + w*0.84, y + h*0.28);
-    ctx.quadraticCurveTo(x + w*0.92, y + h*0.30, x + w*0.93, y + h*0.45);
-    ctx.quadraticCurveTo(x + w*0.94, y + h*0.62, x + w*0.90, y + h*0.78);
-    ctx.lineTo(x + w*0.12, y + h*0.78);
+
+    const bowX = x + w*0.08;
+    const sternX = x + w*0.94;
+    const deckY = y + h*0.26;
+    const keelY = y + h*0.80;
+
+    ctx.moveTo(bowX, keelY);
+    ctx.quadraticCurveTo(x + w*0.03, y + h*0.70, x + w*0.05, y + h*0.56);
+    ctx.quadraticCurveTo(x + w*0.09, y + h*0.36, x + w*0.16, deckY);
+
+    ctx.lineTo(x + w*0.82, deckY - h*0.02);
+    ctx.quadraticCurveTo(x + w*0.93, deckY, sternX, y + h*0.44);
+    ctx.quadraticCurveTo(x + w*0.97, y + h*0.64, x + w*0.90, keelY);
+    ctx.lineTo(bowX, keelY);
     ctx.closePath();
+
+    const hullGrad=ctx.createLinearGradient(0,deckY,0,keelY);
+    hullGrad.addColorStop(0,'#0a0f1f');
+    hullGrad.addColorStop(1,'#03040b');
+    ctx.fillStyle=hullGrad;
     ctx.fill();
+
+    ctx.strokeStyle='rgba(200,230,255,.22)';
+    ctx.lineWidth=3;
     ctx.stroke();
 
-    // superstructure
-    ctx.globalAlpha = 0.95;
-    ctx.fillStyle = '#101a36';
-    ctx.strokeStyle = 'rgba(180,210,255,.18)';
-    ctx.lineWidth = 2;
-
-    const supX = x + w*0.22, supY = y + h*0.22, supW = w*0.58, supH = h*0.20;
+    // White stripe band (Titanic vibe)
+    ctx.globalAlpha=0.14;
+    ctx.strokeStyle='rgba(230,240,255,.9)';
+    ctx.lineWidth=10;
     ctx.beginPath();
-    ctx.roundRect(supX, supY, supW, supH, 16);
-    ctx.fill();
+    ctx.moveTo(x+w*0.18, y+h*0.52);
+    ctx.lineTo(x+w*0.88, y+h*0.50);
     ctx.stroke();
+    ctx.globalAlpha=1;
 
-    // bridge bump
-    ctx.beginPath();
-    ctx.roundRect(supX + supW*0.06, supY - supH*0.30, supW*0.22, supH*0.55, 12);
-    ctx.fill();
-    ctx.stroke();
+    // Superstructure
+    const supX = x + w*0.22, supY = y + h*0.17, supW = w*0.60, supH = h*0.18;
+    const supGrad=ctx.createLinearGradient(0,supY,0,supY+supH);
+    supGrad.addColorStop(0,'#14224a');
+    supGrad.addColorStop(1,'#0c1636');
+    rr(supX,supY,supW,supH,18,supGrad,'rgba(200,230,255,.16)',2);
 
-    // funnels
-    const funnels = [x+w*0.40, x+w*0.48, x+w*0.56, x+w*0.64];
+    // Bridge
+    rr(supX+supW*0.05, supY - supH*0.28, supW*0.22, supH*0.58, 12, 'rgba(20,34,74,.92)', 'rgba(200,230,255,.16)', 2);
+
+    // Lifeboats row
+    ctx.globalAlpha=0.9;
+    for(let i=0;i<10;i++){
+      const bx = supX + supW*0.22 + i*(supW*0.06);
+      const by = supY + supH*0.08;
+      rr(bx,by, supW*0.05, supH*0.18, 10, 'rgba(230,210,170,.35)', 'rgba(255,240,220,.14)', 1);
+    }
+    ctx.globalAlpha=1;
+
+    // Funnels (more realistic: caps + slight shading)
+    const funnels=[x+w*0.44, x+w*0.52, x+w*0.60, x+w*0.68];
     for(const fx of funnels){
-      drawFunnel(fx, y + h*0.07, h*0.18, t);
+      drawFunnel(fx, y+h*0.05, h*0.18, t);
     }
 
-    // portholes
-    ctx.globalAlpha = 0.8;
-    for(let i=0;i<26;i++){
-      const px = x + w*0.22 + i*(w*0.58/25);
-      const py = y + h*0.52 + ((i%2)*10);
-      ctx.fillStyle = 'rgba(255,220,140,.35)';
+    // Portholes rows
+    for(let row=0; row<2; row++){
+      const py = y + h*(0.58 + row*0.07);
+      for(let i=0;i<34;i++){
+        const px = x + w*0.20 + i*(w*0.020);
+        ctx.fillStyle='rgba(255,220,160,.22)';
+        ctx.beginPath();
+        ctx.arc(px, py + ((i+row)%3===0?2:0), 2.6, 0, Math.PI*2);
+        ctx.fill();
+      }
+    }
+
+    // Rivet lines (subtle)
+    ctx.globalAlpha=0.12;
+    ctx.strokeStyle='rgba(200,230,255,.40)';
+    ctx.lineWidth=1;
+    for(let i=0;i<5;i++){
+      const ly = y + h*(0.42 + i*0.07);
       ctx.beginPath();
-      ctx.arc(px, py, 3.2, 0, Math.PI*2);
-      ctx.fill();
+      ctx.moveTo(x+w*0.20, ly);
+      ctx.lineTo(x+w*0.90, ly-2);
+      ctx.stroke();
     }
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha=1;
 
-    // foam waterline against hull
-    const waterY = y + h*0.78;
-    ctx.globalAlpha = 0.35;
-    ctx.strokeStyle = 'rgba(190,230,255,.55)';
-    ctx.lineWidth = 3;
+    // Foam at ocean contact
+    const foamY = keelY + 2;
+    ctx.globalAlpha=0.30;
+    ctx.strokeStyle='rgba(210,240,255,.55)';
+    ctx.lineWidth=3;
     ctx.beginPath();
-    for(let xx=x; xx<=x+w; xx+=16){
-      const yy = waterY + Math.sin((xx*0.02) + t*1.8) * 2.5;
+    for(let xx=x; xx<=x+w; xx+=14){
+      const yy = foamY + Math.sin(xx*0.02 + t*1.8)*2.2;
       if(xx===x) ctx.moveTo(xx,yy); else ctx.lineTo(xx,yy);
     }
     ctx.stroke();
-    ctx.globalAlpha = 1;
-
-    // glass vignette
-    ctx.globalAlpha = 0.14;
-    ctx.fillStyle = '#7aa7ff';
-    ctx.beginPath();
-    ctx.roundRect(x+18, y+18, w-36, h-36, 22);
-    ctx.fill();
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha=1;
 
     ctx.restore();
 
+    // Interior “cutout window” frame on top so it never looks covered
+    rr(interior.x-10, interior.y-10, interior.w+20, interior.h+20, 22,
+       'rgba(120,170,255,.09)', 'rgba(210,235,255,.22)', 2);
+
     function drawFunnel(cx, topY, fh, t){
-      const fw = 34;
+      const fw = Math.max(30, w*0.04);
+      const bodyGrad=ctx.createLinearGradient(0,topY,0,topY+fh);
+      bodyGrad.addColorStop(0,'#d6a157');
+      bodyGrad.addColorStop(1,'#8a5a1f');
 
-      ctx.fillStyle = '#c58a3a';
-      ctx.strokeStyle = 'rgba(0,0,0,.35)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.roundRect(cx - fw/2, topY, fw, fh, 10);
-      ctx.fill();
-      ctx.stroke();
+      rr(cx-fw/2, topY, fw, fh, 10, bodyGrad, 'rgba(0,0,0,.35)', 2);
+      rr(cx-fw/2, topY-7, fw, 16, 10, '#0f111a', 'rgba(255,255,255,.08)', 1);
 
-      ctx.fillStyle = '#141822';
+      // smoke
+      ctx.globalAlpha=0.18;
+      ctx.fillStyle='#cfe0ff';
+      const sx = cx + Math.sin(t*0.7 + cx*0.01)*10;
+      const sy = topY - 22 - (Math.cos(t*0.8 + cx*0.01)*6);
       ctx.beginPath();
-      ctx.roundRect(cx - fw/2, topY-6, fw, 16, 10);
+      ctx.ellipse(sx, sy, 26, 12, 0, 0, Math.PI*2);
+      ctx.ellipse(sx+20, sy-10, 20, 10, 0, 0, Math.PI*2);
+      ctx.ellipse(sx-18, sy-8, 18, 9, 0, 0, Math.PI*2);
       ctx.fill();
-
-      ctx.globalAlpha = 0.20;
-      ctx.fillStyle = '#cfe0ff';
-      const sx = cx + Math.sin(t*0.7 + cx*0.01)*8;
-      const sy = topY - 18 - (Math.cos(t*0.8 + cx*0.01)*6);
-      ctx.beginPath();
-      ctx.ellipse(sx, sy, 22, 10, 0, 0, Math.PI*2);
-      ctx.ellipse(sx+18, sy-8, 18, 9, 0, 0, Math.PI*2);
-      ctx.ellipse(sx-16, sy-6, 16, 8, 0, 0, Math.PI*2);
-      ctx.fill();
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha=1;
     }
   }
 
-  // ---------- Rendering ----------
-  function draw(){
-    ctx.clearRect(0,0,W,H);
-    const now = perfNow()*0.001;
-
-    // sky
-    const sky = ctx.createLinearGradient(0,0,0,H);
-    sky.addColorStop(0, '#07102a');
-    sky.addColorStop(0.55, '#08143a');
-    sky.addColorStop(1, '#040817');
-    ctx.fillStyle = sky;
-    ctx.fillRect(0,0,W,H);
-
-    // stars
-    ctx.globalAlpha = 0.16;
-    for(let i=0;i<90;i++){
-      const x = (i*173)%W;
-      const y = (i*71)%H;
-      const s = ((i*29)%3)+1;
-      ctx.fillStyle = '#cfe0ff';
-      ctx.fillRect(x, y*0.55, s, s);
-    }
-    ctx.globalAlpha = 1;
-
-    // clouds + ocean
-    drawCloudBand(now);
-    const oceanTop = H*0.70;
-    drawOcean(now, oceanTop);
-
-    // big frame ship
-    const shipFrame = { x: 70, y: 90, w: W-140, h: 360 };
-    drawTitanicFrame(now, shipFrame);
-
-    // interior window that hosts gameplay
-    const interior = { x: shipFrame.x + 95, y: shipFrame.y + 85, w: shipFrame.w - 190, h: shipFrame.h - 130 };
-
-    // interior glass
-    ctx.save();
-    ctx.globalAlpha = 0.18;
-    ctx.fillStyle = '#7aa7ff';
-    ctx.beginPath();
-    ctx.roundRect(interior.x, interior.y, interior.w, interior.h, 18);
-    ctx.fill();
-    ctx.globalAlpha = 0.24;
-    ctx.strokeStyle = '#9fbfff';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.restore();
-
-    // transform: draw gameplay ship into interior rect
+  function drawGameplay(){
+    // Map logical ship into interior rect
     ctx.save();
     const sx = interior.w / ship.w;
     const sy = interior.h / ship.h;
@@ -629,24 +672,27 @@
     ctx.scale(sx, sy);
     ctx.translate(-ship.x, -ship.y);
 
-    // gameplay drawing (original style)
+    // tilt
     ctx.save();
-    const cx = ship.x + ship.w/2, cy = ship.y + ship.h/2;
-    ctx.translate(cx, cy);
+    const cx = ship.x+ship.w/2, cy = ship.y+ship.h/2;
+    ctx.translate(cx,cy);
     ctx.rotate(ship.tilt);
-    ctx.translate(-cx, -cy);
+    ctx.translate(-cx,-cy);
 
-    roundRect(ship.x, ship.y, ship.w, ship.h, 18, 'rgba(10,18,40,.55)', 'rgba(120,160,255,.18)');
+    // main chamber
+    rr(ship.x, ship.y, ship.w, ship.h, 18, 'rgba(6,10,22,.78)', 'rgba(170,210,255,.22)', 2);
 
-    ctx.strokeStyle = 'rgba(255,255,255,.14)';
-    ctx.lineWidth = 2;
+    // deck line
+    ctx.strokeStyle='rgba(255,255,255,.16)';
+    ctx.lineWidth=2;
     ctx.beginPath();
     ctx.moveTo(ship.x+24, ship.y+ship.deckY);
     ctx.lineTo(ship.x+ship.w-24, ship.y+ship.deckY);
     ctx.stroke();
 
-    ctx.strokeStyle = 'rgba(255,255,255,.10)';
-    ctx.lineWidth = 1;
+    // compartments
+    ctx.strokeStyle='rgba(255,255,255,.10)';
+    ctx.lineWidth=1;
     for(let i=1;i<6;i++){
       const x = ship.x + (ship.w*i/6);
       ctx.beginPath();
@@ -655,64 +701,61 @@
       ctx.stroke();
     }
 
-    const waterTop = ship.y + ship.deckY + (ship.h-ship.deckY-18) * (1-water);
-    ctx.fillStyle = 'rgba(40,140,255,.35)';
+    // water
+    const waterTop = ship.y + ship.deckY + (ship.h-ship.deckY-18)*(1-water);
+    ctx.fillStyle='rgba(30,120,255,.38)';
     ctx.beginPath();
-    ctx.roundRect(ship.x+18, waterTop, ship.w-36, (ship.y+ship.h-18) - waterTop, 14);
+    ctx.roundRect(ship.x+18, waterTop, ship.w-36, (ship.y+ship.h-18)-waterTop, 14);
     ctx.fill();
 
+    // leaks
     for(const L of leaks){
       if(L.patched) continue;
       const under = L.y > waterTop;
-      ctx.fillStyle = under ? 'rgba(140,220,255,.9)' : 'rgba(255,120,160,.9)';
-      ctx.beginPath();
-      ctx.arc(L.x, L.y, under ? 7 : 6, 0, Math.PI*2);
-      ctx.fill();
-
+      ctx.fillStyle = under ? 'rgba(160,235,255,.92)' : 'rgba(255,120,160,.92)';
+      ctx.beginPath(); ctx.arc(L.x,L.y, under?7:6, 0, Math.PI*2); ctx.fill();
       if(!under){
-        ctx.strokeStyle = 'rgba(255,120,160,.7)';
-        ctx.lineWidth = 2;
+        ctx.strokeStyle='rgba(255,120,160,.75)';
+        ctx.lineWidth=2;
         ctx.beginPath();
         ctx.moveTo(L.x, L.y+6);
         ctx.lineTo(L.x+(-2+Math.random()*4), L.y+22);
         ctx.stroke();
       } else {
-        ctx.globalAlpha = 0.5;
+        ctx.globalAlpha=0.45;
         for(let i=0;i<3;i++){
           ctx.beginPath();
-          ctx.arc(L.x+(-6+Math.random()*12), L.y - (6+Math.random()*16), 1.5+Math.random()*1.7, 0, Math.PI*2);
+          ctx.arc(L.x+(-6+Math.random()*12), L.y-(6+Math.random()*16), 1.5+Math.random()*1.7, 0, Math.PI*2);
           ctx.fill();
         }
-        ctx.globalAlpha = 1;
+        ctx.globalAlpha=1;
       }
     }
 
-    ctx.fillStyle = 'rgba(0,0,0,.25)';
-    ctx.beginPath();
-    ctx.ellipse(player.x, player.y+10, 11, 5, 0, 0, Math.PI*2);
-    ctx.fill();
+    // player
+    ctx.fillStyle='rgba(0,0,0,.28)';
+    ctx.beginPath(); ctx.ellipse(player.x, player.y+10, 11, 5, 0, 0, Math.PI*2); ctx.fill();
 
-    ctx.fillStyle = 'rgba(255,255,255,.92)';
-    ctx.beginPath();
-    ctx.arc(player.x, player.y, player.r, 0, Math.PI*2);
-    ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.94)';
+    ctx.beginPath(); ctx.arc(player.x,player.y,player.r,0,Math.PI*2); ctx.fill();
 
-    if(player.patching > 0.02){
-      ctx.strokeStyle = 'rgba(251,191,36,.95)';
-      ctx.lineWidth = 3;
+    if(player.patching>0.02){
+      ctx.strokeStyle='rgba(251,191,36,.95)';
+      ctx.lineWidth=3;
       ctx.beginPath();
-      ctx.arc(player.x, player.y, 16 + Math.sin(perfNow()*0.012)*1.5, 0, Math.PI*2);
+      ctx.arc(player.x,player.y, 16 + Math.sin(perfNow()*0.012)*1.5, 0, Math.PI*2);
       ctx.stroke();
     }
-    if(player.pumping > 0.02){
-      ctx.strokeStyle = 'rgba(52,211,153,.95)';
-      ctx.lineWidth = 3;
+    if(player.pumping>0.02){
+      ctx.strokeStyle='rgba(52,211,153,.95)';
+      ctx.lineWidth=3;
       ctx.beginPath();
-      ctx.arc(player.x, player.y, 21 + Math.sin(perfNow()*0.011)*1.5, 0, Math.PI*2);
+      ctx.arc(player.x,player.y, 21 + Math.sin(perfNow()*0.011)*1.5, 0, Math.PI*2);
       ctx.stroke();
     }
 
-    ctx.strokeStyle = 'rgba(255,255,255,.22)';
+    // waterline marker
+    ctx.strokeStyle='rgba(255,255,255,.22)';
     ctx.setLineDash([6,6]);
     ctx.beginPath();
     ctx.moveTo(ship.x+18, waterTop);
@@ -720,51 +763,67 @@
     ctx.stroke();
     ctx.setLineDash([]);
 
+    // game over overlay
     if(!running){
-      ctx.fillStyle = 'rgba(0,0,0,.55)';
+      ctx.fillStyle='rgba(0,0,0,.55)';
       ctx.fillRect(ship.x, ship.y, ship.w, ship.h);
-      ctx.fillStyle = 'rgba(255,255,255,.92)';
-      ctx.font = '700 34px system-ui, -apple-system, Segoe UI, Roboto';
+      ctx.fillStyle='rgba(255,255,255,.92)';
+      ctx.font='700 34px system-ui,-apple-system,Segoe UI,Roboto';
       ctx.fillText('SHIP LOST', ship.x+200, ship.y+170);
-      ctx.font = '500 16px system-ui, -apple-system, Segoe UI, Roboto';
-      ctx.fillStyle = 'rgba(231,238,252,.92)';
-      ctx.fillText(`Survived: ${fmtTime(timeSurvived)}   •   Best: ${best?fmtTime(best):'—'}`, ship.x+200, ship.y+205);
-      ctx.fillStyle = 'rgba(231,238,252,.78)';
+      ctx.font='500 16px system-ui,-apple-system,Segoe UI,Roboto';
+      ctx.fillStyle='rgba(231,238,252,.90)';
+      ctx.fillText(`Survived: ${fmtTime(timeSurvived)} • Best: ${best?fmtTime(best):'—'}`, ship.x+200, ship.y+205);
+      ctx.fillStyle='rgba(231,238,252,.78)';
       ctx.fillText('Click Start / Restart to try again', ship.x+200, ship.y+235);
     }
 
-    ctx.restore(); // tilt block
-    ctx.restore(); // gameplay transform
+    ctx.restore(); // tilt
+    ctx.restore(); // transform
+  }
 
+  function draw(){
+    const t = perfNow()*0.001;
+    ctx.clearRect(0,0,W,H);
+
+    drawSky(t);
+    drawClouds(t);
+    drawOcean(t);
+
+    // Ship + interior + gameplay
+    drawShipFrame(t);
+    drawGameplay();
+
+    // Pause overlay
     if(paused && running){
-      ctx.fillStyle = 'rgba(0,0,0,.30)';
+      ctx.fillStyle='rgba(0,0,0,.25)';
       ctx.fillRect(0,0,W,H);
-      ctx.fillStyle = 'rgba(255,255,255,.92)';
-      ctx.font = '700 28px system-ui, -apple-system, Segoe UI, Roboto';
-      ctx.fillText('PAUSED', 26, 44);
-      ctx.font = '500 14px system-ui, -apple-system, Segoe UI, Roboto';
-      ctx.fillStyle = 'rgba(231,238,252,.8)';
-      ctx.fillText('Press P to resume', 26, 66);
+      ctx.fillStyle='rgba(255,255,255,.92)';
+      ctx.font='800 34px system-ui,-apple-system,Segoe UI,Roboto';
+      ctx.fillText('PAUSED', shipFrame.x + 24, shipFrame.y + 46);
+      ctx.font='500 14px system-ui,-apple-system,Segoe UI,Roboto';
+      ctx.fillStyle='rgba(231,238,252,.78)';
+      ctx.fillText('Press P to resume', shipFrame.x + 24, shipFrame.y + 70);
     }
   }
 
-  // ---------- Loop ----------
+  // ---------------- Loop ----------------
   let last = perfNow();
   function loop(){
-    const now = perfNow();
-    const dt = clamp((now-last)/1000, 0, 0.04);
-    last = now;
-
+    const now=perfNow();
+    const dt=clamp((now-last)/1000,0,0.04);
+    last=now;
     update(dt);
     draw();
-
     requestAnimationFrame(loop);
   }
+
+  // boot
+  resize();
   loop();
 
-  // attract mode
+  // attract state
   resetGame();
-  running = false;
+  running=false;
   draw();
 
 })();
