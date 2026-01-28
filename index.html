@@ -162,7 +162,7 @@
 <script>
 (() => {
   const canvas = document.getElementById('c');
-  // IMPORTANT: keep alpha=false for performance, but then transparency must be correct in shipTex.
+  // Opaque canvas for perf. IMPORTANT: do NOT clearRect (clears to black). Always paint background.
   const ctx = canvas.getContext('2d', { alpha:false });
 
   let W=0, H=0, DPR=1;
@@ -259,7 +259,7 @@
   addEventListener('keyup',(e)=>keys.delete(e.code),{passive:true});
 
   // =============================
-  // SHIP ASSET (ship.png) + ROBUST MATTE REMOVAL
+  // SHIP ASSET (ship.png)
   // =============================
   const shipImg = new Image();
   shipImg.src = './ship.png';
@@ -285,7 +285,18 @@
     const d = img.data;
     const w = shipTex.width, h = shipTex.height;
 
-    // Sample corner matte color (average of small patches)
+    // If the PNG already has transparency in corners, don't matte-remove aggressively.
+    function cornerAlpha(x,y){
+      const i=(y*w+x)*4+3;
+      return d[i];
+    }
+    const cornersA = [
+      cornerAlpha(0,0), cornerAlpha(w-1,0),
+      cornerAlpha(0,h-1), cornerAlpha(w-1,h-1),
+    ];
+    const hasTransparentCorners = cornersA.some(a => a < 40);
+
+    // Sample corner matte color (average patches)
     function samplePatch(px,py){
       let sr=0,sg=0,sb=0,c=0;
       const rad=6;
@@ -308,8 +319,9 @@
     };
 
     // Flood fill from corners removing only pixels "close to matte".
-    // This preserves the ship hull even if it's black, as long as hull isn't connected to corners via matte pixels.
-    const THRESH = 28; // loosened to handle your PNG’s “not pure black” matte
+    // If corners are already transparent, use a tighter threshold so we don't eat into the ship.
+    const THRESH = hasTransparentCorners ? 18 : 28;
+
     const visited = new Uint8Array(w*h);
     const qx = new Int32Array(w*h);
     const qy = new Int32Array(w*h);
@@ -322,7 +334,6 @@
       qx[qt]=x; qy[qt]=y; qt++;
     }
 
-    // seed corners + a few edge points near corners
     push(0,0); push(w-1,0); push(0,h-1); push(w-1,h-1);
     for(let i=0;i<40;i++){
       push(i,0); push(0,i);
@@ -336,7 +347,6 @@
       const p=(y*w+x)*4;
       const r=d[p], g=d[p+1], b=d[p+2], a=d[p+3];
 
-      // if already transparent, keep it and continue flood
       let close = true;
       if (a!==0){
         const dist = colorDist(r,g,b, matte.r, matte.g, matte.b);
@@ -344,7 +354,6 @@
       }
 
       if (close){
-        // Make transparent + continue flood outward
         d[p+3]=0;
 
         if (x>0) push(x-1,y);
@@ -357,7 +366,7 @@
     shipTexCtx.putImageData(img, 0,0);
     shipRGBA = img.data;
     shipReady = true;
-    toast(`Loaded ship.png (matte removed)`);
+    toast(`Loaded ship.png`);
   }
 
   shipImg.onload = () => buildProcessedShipFloodFill();
@@ -395,18 +404,19 @@
     const iw = shipReady ? shipTex.width : 1400;
     const ih = shipReady ? shipTex.height : 600;
 
-    // Big ship, front and center
-    const targetW = availW * 1.20;
-    const targetH = availH * 0.88;
+    // Make ship BIG. Fill most of the non-HUD canvas.
+    const targetW = availW * 0.98;
+    const targetH = availH * 0.92;
 
-    const s = Math.min(targetW/iw, targetH/ih) * 1.15;
+    const s = Math.min(targetW/iw, targetH/ih);
 
     shipRect.w = iw*s;
     shipRect.h = ih*s;
 
-    shipRect.x = SAFE_PAD + (availW - shipRect.w)*0.02;
-    shipRect.y = SAFE_PAD + (availH - shipRect.h)*0.18;
-    shipRect.y = Math.max(SAFE_PAD+20, shipRect.y);
+    // Slightly left of center, vertically centered
+    shipRect.x = SAFE_PAD + (availW - shipRect.w)*0.04;
+    shipRect.y = SAFE_PAD + (availH - shipRect.h)*0.10;
+    shipRect.y = Math.max(SAFE_PAD+14, shipRect.y);
   }
 
   function shipToScreen(nx, ny){
@@ -419,14 +429,14 @@
   // =============================
   // GAME STATE
   // =============================
-  // Move the gameplay band UP so water fills a meaningful part of the ship before death
-  const HULL_BAND = { top: 0.52, bot: 0.93 };
+  // Hull-only play band (keeps leaks out of bright cabin/deck area)
+  const HULL_BAND = { top: 0.64, bot: 0.96 };
 
   const state = {
     running:false, paused:false, demo:false, sound:true,
     startMs:0, bestMs:0,
-    water:0.12, hull:1.0,
-    player:{ nx:0.34, ny:0.80, r:0.018, speed:0.40 },
+    water:0.10, hull:1.0,
+    player:{ nx:0.34, ny:0.83, r:0.018, speed:0.40 },
     leaks:[], // {nx, ny, t, fixed, progress}
     spawnTimer:0,
     spawnInterval:2.6,
@@ -451,10 +461,10 @@
     state.awaitingSave=false;
     ui.saveRow.style.display='none';
 
-    state.water=0.12;
+    state.water=0.10;
     state.hull=1.0;
     state.player.nx=0.34;
-    state.player.ny=0.80;
+    state.player.ny=0.83;
 
     state.leaks=[];
     state.spawnTimer=0;
@@ -478,7 +488,6 @@
   };
 
   function maybeDie(elapsedMs){
-    // slightly later death threshold so it feels fair with the larger band
     if (state.hull<=0.001 || state.water>=0.985){
       state.dead=true;
       state.sinkStartMs=nowMs();
@@ -510,28 +519,26 @@
   }
 
   function rand(a,b){ return a+Math.random()*(b-a); }
-
-  function inHullBand(nx,ny){
-    return ny>=HULL_BAND.top && ny<=HULL_BAND.bot;
-  }
+  function inHullBand(nx,ny){ return ny>=HULL_BAND.top && ny<=HULL_BAND.bot; }
 
   function validLeakSpot(nx,ny){
     if (nx<0.06||nx>0.94) return false;
     if (!inHullBand(nx,ny)) return false;
 
-    if (shipReady && alphaAt(nx,ny) <= 35) return false;
+    // Must be inside ship alpha
+    if (shipReady && alphaAt(nx,ny) <= 80) return false;
 
-    // reject bright pixels (cabins / decks)
+    // Reject bright deck/cabin pixels harder
     if (shipReady){
       const {r,g,b} = rgbAt(nx,ny);
       const L = luminance(r,g,b);
-      if (L > 110) return false;
+      if (L > 85) return false;
     }
     return true;
   }
 
   function spawnLeak(){
-    for(let i=0;i<260;i++){
+    for(let i=0;i<340;i++){
       const nx=rand(0.08,0.92);
       const ny=rand(HULL_BAND.top,HULL_BAND.bot);
       if(!validLeakSpot(nx,ny)) continue;
@@ -566,7 +573,7 @@
     state.player.ny=Math.max(HULL_BAND.top+0.02,Math.min(HULL_BAND.bot-0.02,state.player.ny));
 
     if (!shipReady) return;
-    if (alphaAt(state.player.nx, state.player.ny) > 35) return;
+    if (alphaAt(state.player.nx, state.player.ny) > 80) return;
 
     const r=0.024;
     for(let a=0;a<30;a++){
@@ -574,7 +581,7 @@
       const nx=state.player.nx+Math.cos(ang)*r;
       const ny=state.player.ny+Math.sin(ang)*r;
       if(!inHullBand(nx,ny)) continue;
-      if(alphaAt(nx,ny)>35){ state.player.nx=nx; state.player.ny=ny; return; }
+      if(alphaAt(nx,ny)>80){ state.player.nx=nx; state.player.ny=ny; return; }
     }
   }
 
@@ -653,7 +660,6 @@
       state.water += dt*(0.010*bonus);
       state.hull  -= dt*(0.0028*bonus);
     }
-    // baseline strain
     state.hull -= dt*(state.water*0.0018);
 
     if(keys.has('Space')) pump(0.030*dt, 0.010*dt);
@@ -683,11 +689,32 @@
   }
 
   // =============================
-  // DRAW
+  // DRAW (HARD RESET EACH FRAME)
   // =============================
-  function draw(){
-    ctx.clearRect(0,0,W,H);
+  function resetCanvasState(){
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = 'rgba(0,0,0,0)';
+    ctx.filter = 'none';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([]);
+  }
 
+  function draw(){
+    // IMPORTANT: prevent “stuck” composite/alpha states from past operations
+    resetCanvasState();
+
+    // Paint background EVERY frame (no clearRect on opaque canvas)
+    drawBackground();
+
+    rebuildShipRect();
+    drawShipAndGameplay();
+    drawDeathOverlay();
+  }
+
+  function drawBackground(){
     // sky gradient
     const g = ctx.createLinearGradient(0,0,0,H);
     g.addColorStop(0,'#030718');
@@ -699,10 +726,6 @@
     drawStars();
     drawClouds();
     drawOcean();
-
-    rebuildShipRect();
-    drawShipAndGameplay();
-    drawDeathOverlay();
   }
 
   function drawStars(){
@@ -786,19 +809,14 @@
     ctx.translate(-cx, -cy);
     ctx.globalAlpha = fade;
 
-    // ship
     if (shipReady){
       ctx.drawImage(shipTex, shipRect.x, shipRect.y, shipRect.w, shipRect.h);
     } else {
-      // fallback rectangle so you can still play if ship fails to load
       ctx.fillStyle='rgba(255,255,255,.06)';
       ctx.fillRect(shipRect.x, shipRect.y, shipRect.w, shipRect.h);
     }
 
-    // internal water + waterline
     drawInternalWater(fade);
-
-    // leaks + player + leak spray/bubbles
     drawLeaksAndPlayer(fade);
 
     ctx.restore();
@@ -838,7 +856,7 @@
     const bandH = (HULL_BAND.bot - HULL_BAND.top);
     const waterNY = HULL_BAND.bot - bandH*state.water;
 
-    // leaks + leak “spilling/bubbles”
+    // leaks + leak spray/bubbles
     for (const L of state.leaks){
       const p=shipToScreen(L.nx,L.ny);
       const r=shipRect.w*0.020;
@@ -846,7 +864,6 @@
       const underwater = L.ny > waterNY;
       const a = L.fixed ? Math.max(0, 1 - (L.t-0.7)) : 1;
 
-      // Ring
       ctx.save();
       ctx.globalAlpha=(0.95*a)*fade;
       ctx.lineWidth=Math.max(2, shipRect.w*0.003);
@@ -857,21 +874,17 @@
       ctx.strokeStyle = underwater ? 'rgba(90,210,255,.95)' : 'rgba(200,140,255,.90)';
       ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2); ctx.stroke();
 
-      // patched fill
       if (L.fixed){
         ctx.shadowBlur=0;
         ctx.fillStyle='rgba(255,240,120,.88)';
         ctx.beginPath(); ctx.arc(p.x,p.y,r*0.58,0,Math.PI*2); ctx.fill();
       }
-
       ctx.restore();
 
-      // Leak spray / bubbles (this is what you said you liked)
       if (!L.fixed){
         drawLeakSpray(p.x, p.y, underwater, fade);
       }
 
-      // underwater ping at waterline
       if (!L.fixed && underwater){
         const ping=shipToScreen(L.nx, waterNY);
         ctx.save();
@@ -899,7 +912,7 @@
     ctx.strokeStyle='rgba(140,200,255,.75)';
     ctx.beginPath(); ctx.arc(P.x,P.y,pr*1.65,0,Math.PI*2); ctx.stroke();
 
-    // progress arc on player ring
+    // progress arc on player ring (THIS is where the timer/progress belongs)
     if (state.hoverLeakIndex >= 0){
       const L = state.leaks[state.hoverLeakIndex];
       const prog = Math.max(0, Math.min(1, L.progress));
@@ -918,7 +931,6 @@
     ctx.save();
     ctx.globalAlpha = (underwater ? 0.55 : 0.72) * fade;
 
-    // main spray
     ctx.strokeStyle = underwater ? 'rgba(120,220,255,.75)' : 'rgba(220,245,255,.80)';
     ctx.lineWidth = underwater ? 1.4 : 1.8;
     ctx.beginPath();
@@ -931,7 +943,6 @@
     }
     ctx.stroke();
 
-    // bubbles
     for (let i=0;i<10;i++){
       const phase = (t*1.6 + i*0.22);
       const bx = x + Math.sin(phase*3.1+i)*14;
